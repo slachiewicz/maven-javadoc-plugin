@@ -174,7 +174,7 @@ under the License.
     <dependency>
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-archiver</artifactId>
-      <version>3.2.0</version>
+      <version>3.5.0</version>
     </dependency>
     <dependency>
       <groupId>org.apache.maven.shared</groupId>
@@ -245,7 +245,7 @@ under the License.
     <dependency>
       <groupId>org.codehaus.plexus</groupId>
       <artifactId>plexus-archiver</artifactId>
-      <version>3.6.0</version>
+      <version>4.2.0</version>
     </dependency>
     <dependency>
       <groupId>org.codehaus.plexus</groupId>
@@ -460,7 +460,7 @@ under the License.
                     <mockRepo>
                       <source>src/it/mrm/repository</source>
                     </mockRepo>
-                    <proxyRepo />
+                    <proxyRepo/>
                   </repositories>
                 </configuration>
               </execution>
