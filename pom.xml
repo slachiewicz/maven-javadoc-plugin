@@ -26,7 +26,7 @@ under the License.
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-plugins</artifactId>
     <version>34</version>
-    <relativePath />
+    <relativePath/>
   </parent>
 
   <artifactId>maven-javadoc-plugin</artifactId>
@@ -258,7 +258,7 @@ under the License.
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
-      <version>4.5.12</version>
+      <version>4.5.13</version>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
@@ -499,7 +499,7 @@ under the License.
                     <mockRepo>
                       <source>src/it/mrm/repository</source>
                     </mockRepo>
-                    <proxyRepo />
+                    <proxyRepo/>
                   </repositories>
                 </configuration>
               </execution>
