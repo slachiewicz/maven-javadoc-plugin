@@ -1,0 +1,48 @@
+version: 2
+updates:
+- package-ecosystem: maven
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "04:00"
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: org.mockito:mockito-core
+    versions:
+    - 3.7.7
+    - 3.8.0
+  - dependency-name: org.codehaus.plexus:plexus-archiver
+    versions:
+    - 4.2.3
+    - 4.2.4
+  - dependency-name: org.apache.maven.shared:maven-common-artifact-filters
+    versions:
+    - 3.1.0
+    - 3.1.1
+  - dependency-name: org.apache.maven:maven-archiver
+    versions:
+    - 3.5.1
+  - dependency-name: org.codehaus.plexus:plexus-java
+    versions:
+    - 1.0.6
+  - dependency-name: org.apache.maven.shared:maven-artifact-transfer
+    versions:
+    - 0.13.1
+  - dependency-name: org.apache.httpcomponents:httpcore
+    versions:
+    - 4.4.14
+  - dependency-name: org.apache.maven.wagon:wagon-http:shaded
+    versions:
+    - 3.4.2
+  - dependency-name: org.apache.maven.wagon:wagon-provider-api
+    versions:
+    - 3.4.2
+  - dependency-name: junit:junit
+    versions:
+    - 4.13.1
+  - dependency-name: org.apache.httpcomponents:httpclient
+    versions:
+    - 4.5.13
+  - dependency-name: org.codehaus.plexus:plexus-interactivity-api
+    versions:
+    - "1.0"
