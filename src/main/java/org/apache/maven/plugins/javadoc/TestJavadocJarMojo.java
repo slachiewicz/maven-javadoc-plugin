@@ -18,33 +18,15 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
-import org.apache.maven.artifact.Artifact;
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.plugin.annotations.Mojo;
+import org.apache.maven.api.plugin.annotations.Parameter;
 import org.apache.maven.plugins.javadoc.resolver.SourceResolverConfig;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.MavenProjectHelper;
-import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.toolchain.ToolchainManager;
-import org.codehaus.plexus.archiver.jar.JarArchiver;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.util.StringUtils;
-import org.eclipse.aether.RepositorySystem;
-import org.eclipse.aether.util.filter.ScopeDependencyFilter;
 
 /**
  * Bundles the Javadoc documentation for <code>test Java code</code> in a <b>NON aggregator</b> project into
@@ -54,37 +36,8 @@ import org.eclipse.aether.util.filter.ScopeDependencyFilter;
  * @author <a href="mailto:vincent.siveton@gmail.com">Vincent Siveton</a>
  * @since 2.5
  */
-@Mojo(
-        name = "test-jar",
-        defaultPhase = LifecyclePhase.PACKAGE,
-        requiresDependencyResolution = ResolutionScope.TEST,
-        threadSafe = true)
+@Mojo(name = "test-jar", defaultPhase = "package")
 public class TestJavadocJarMojo extends JavadocJarMojo {
-
-    // CHECKSTYLE_OFF: ParameterNumber
-    @Inject
-    public TestJavadocJarMojo(
-            MavenProjectHelper projectHelper,
-            JarArchiver jarArchiver,
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        super(
-                projectHelper,
-                jarArchiver,
-                siteTool,
-                archiverManager,
-                resourceResolver,
-                repoSystem,
-                artifactHandlerManager,
-                mavenProjectBuilder,
-                toolchainManager);
-    }
-    // CHECKSTYLE_ON: ParameterNumber
 
     // ----------------------------------------------------------------------
     // Javadoc Options (should be inline with Javadoc options defined in TestJavadocReport)
@@ -98,7 +51,7 @@ public class TestJavadocJarMojo extends JavadocJarMojo {
     @Parameter(
             property = "testDoctitle",
             alias = "doctitle",
-            defaultValue = "${project.name} ${project.version} Test API")
+            defaultValue = "${project.model.name} ${project.version} Test API")
     private String testDoctitle;
 
     /**
@@ -110,7 +63,7 @@ public class TestJavadocJarMojo extends JavadocJarMojo {
     @Parameter(
             property = "testOverview",
             alias = "overview",
-            defaultValue = "${basedir}/src/test/javadoc/overview.html")
+            defaultValue = "${project.basedir}/src/test/javadoc/overview.html")
     private File testOverview;
 
     /**
@@ -121,7 +74,7 @@ public class TestJavadocJarMojo extends JavadocJarMojo {
     @Parameter(
             property = "testWindowtitle",
             alias = "windowtitle",
-            defaultValue = "${project.name} ${project.version} Test API")
+            defaultValue = "${project.model.name} ${project.version} Test API")
     private String testWindowtitle;
 
     // ----------------------------------------------------------------------
@@ -133,7 +86,7 @@ public class TestJavadocJarMojo extends JavadocJarMojo {
      *
      * @since 2.5
      */
-    @Parameter(alias = "javadocDirectory", defaultValue = "${basedir}/src/test/javadoc")
+    @Parameter(alias = "javadocDirectory", defaultValue = "${project.basedir}/src/test/javadoc")
     private File testJavadocDirectory;
 
     /**
@@ -176,7 +129,7 @@ public class TestJavadocJarMojo extends JavadocJarMojo {
     }
 
     @Override
-    protected List<File> getProjectBuildOutputDirs(MavenProject p) {
+    protected List<File> getProjectBuildOutputDirs(Project p) {
         List<File> dirs = new ArrayList<>();
         if (StringUtils.isNotEmpty(p.getBuild().getOutputDirectory())) {
             dirs.add(new File(p.getBuild().getOutputDirectory()));
@@ -186,32 +139,6 @@ public class TestJavadocJarMojo extends JavadocJarMojo {
         }
 
         return dirs;
-    }
-
-    @Override
-    protected List<String> getProjectSourceRoots(MavenProject p) {
-        if ("pom".equals(p.getPackaging().toLowerCase(Locale.ENGLISH))) {
-            return Collections.emptyList();
-        }
-
-        return p.getTestCompileSourceRoots();
-    }
-
-    @Override
-    protected List<String> getExecutionProjectSourceRoots(MavenProject p) {
-        if ("pom".equals(p.getExecutionProject().getPackaging().toLowerCase(Locale.ENGLISH))) {
-            return Collections.emptyList();
-        }
-
-        return p.getExecutionProject().getTestCompileSourceRoots();
-    }
-
-    @Override
-    protected ScopeDependencyFilter getDependencyScopeFilter() {
-        return new ScopeDependencyFilter(
-                Arrays.asList(
-                        Artifact.SCOPE_COMPILE, Artifact.SCOPE_PROVIDED, Artifact.SCOPE_SYSTEM, Artifact.SCOPE_TEST),
-                null);
     }
 
     /**

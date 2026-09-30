@@ -23,7 +23,7 @@ under the License.
   <groupId>org.apache.maven.plugins.maven-javadoc-plugin.unit</groupId>
   <artifactId>pom-test</artifactId>
   <version>1.0-SNAPSHOT</version>
-  <packaging>pom</packaging>
+  <packaging>jar</packaging>
   <name>project1</name>
   <build>
     <plugins>
@@ -31,22 +31,28 @@ under the License.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <jarOutputDirectory>${basedir}/target</jarOutputDirectory>
+          <jarOutputDirectory>${project.basedir}/target</jarOutputDirectory>
           <finalName>pom-test</finalName>
           <classifier>javadoc</classifier>
-          <outputDirectory>${basedir}/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/target/javadoc-bundle-options</javadocOptionsDir>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <show>protected</show>
           <encoding>ISO-8859-1</encoding>
           <groups/>
           <tags/>
           <windowtitle>Maven Pom 1.0-SNAPSHOT API</windowtitle>
           <quiet>true</quiet>
-          <javadocDirectory>${basedir}/src/java/javadoc</javadocDirectory>
+          <javadocDirectory>${project.basedir}/src/java/javadoc</javadocDirectory>
           <stylesheet>java</stylesheet>
           <debug>true</debug>
           <failOnError>true</failOnError>
-          <staleDataPath>${basedir}/target/maven-javadoc-plugin-stale-data.txt</staleDataPath>
+          <staleDataPath>${project.basedir}/target/maven-javadoc-plugin-stale-data.txt</staleDataPath>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

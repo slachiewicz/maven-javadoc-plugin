@@ -28,15 +28,18 @@ under the License.
   <inceptionYear>2006</inceptionYear>
   <name>Maven Javadoc Plugin Aggregate Test</name>
   <url>http://maven.apache.org</url>
+  <modules>
+    <module>project1</module>
+    <module>project2</module>
+  </modules>
   <build>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateTestMavenProjectStub"/>
-          <outputDirectory>${basedir}/aggregate-test/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/aggregate-test/target/javadoc-bundle-options</javadocOptionsDir>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <breakiterator>false</breakiterator>
           <old>false</old>
           <show>protected</show>
@@ -62,14 +65,15 @@ under the License.
           <use>true</use>
           <version>true</version>
           <windowtitle>Maven Javadoc Plugin Aggregate Test 1.0-SNAPSHOT API</windowtitle>
-          <reactorProjects>
-            <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateTestMavenProjectStub"/>
-            <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateProject1TestMavenProjectStub"/>
-            <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateProject2TestMavenProjectStub"/>
-          </reactorProjects>
-          <javadocDirectory>${basedir}/aggregate-test/src/main/javadoc</javadocDirectory>
+          <javadocDirectory>${project.basedir}/src/main/javadoc</javadocDirectory>
           <debug>true</debug>
           <failOnError>true</failOnError>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

@@ -33,9 +33,9 @@ under the License.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <sourcepath>${basedir}</sourcepath>
-          <outputDirectory>${basedir}/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/target/javadoc-bundle-options</javadocOptionsDir>
+          <sourcepath>${project.basedir}/</sourcepath>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <show>protected</show>
           <encoding>ISO-8859-1</encoding>
           <groups/>
@@ -75,6 +75,12 @@ under the License.
           <stylesheet>java</stylesheet>
           <debug>true</debug>
           <failOnError>true</failOnError>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

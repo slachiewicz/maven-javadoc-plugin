@@ -18,7 +18,7 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import org.apache.maven.archiver.MavenArchiveConfiguration;
+import org.apache.maven.shared.archiver.MavenArchiveConfiguration;
 
 /**
  * For backwards compatibility, a custom archive configuration that defaults to not including the Maven descriptor.

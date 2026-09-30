@@ -36,24 +36,24 @@ under the License.
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
           <encoding>ISO-8859-1</encoding>
-          <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateNotInSubDirectoryTestMavenProjectStub"/>
-          <outputDirectory>${basedir}/aggregate-modules-not-in-subdirectories-test/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/aggregate-modules-not-in-subdirectories-test/target/javadoc-bundle-options</javadocOptionsDir>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <windowtitle>Maven Javadoc Plugin aggregate resources 1.0-SNAPSHOT API</windowtitle>
-          <reactorProjects>
-            <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateNotInSubDirectoryTestMavenProjectStub"/>
-            <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateNotInSubDirectoryProject1TestMavenProjectStub"/>
-            <project implementation="org.apache.maven.plugins.javadoc.stubs.AggregateNotInSubDirectoryProject2TestMavenProjectStub"/>
-          </reactorProjects>
           <show>protected</show>
           <groups/>
           <tags/>
           <quiet>true</quiet>
-          <javadocDirectory>${basedir}/aggregate-modules-not-in-subdirectories-test/src/main/javadoc</javadocDirectory>
+          <javadocDirectory>${project.basedir}/src/main/javadoc</javadocDirectory>
           <debug>true</debug>
           <docfilessubdirs>true</docfilessubdirs>
           <stylesheet>java</stylesheet>
           <failOnError>true</failOnError>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

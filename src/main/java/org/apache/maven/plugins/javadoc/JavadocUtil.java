@@ -85,15 +85,15 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.message.BasicHeader;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.api.plugin.MojoException;
+import org.apache.maven.api.settings.Proxy;
+import org.apache.maven.api.settings.Settings;
 import org.apache.maven.executor.ExecutorException;
 import org.apache.maven.executor.ExecutorRequest;
 import org.apache.maven.executor.ExecutorResult;
 import org.apache.maven.executor.forked.ForkedMavenExecutor;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.settings.Proxy;
-import org.apache.maven.settings.Settings;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.FileUtils;
 import org.codehaus.plexus.languages.java.version.JavaVersion;
@@ -127,8 +127,8 @@ public class JavadocUtil {
      * @param includeFiles whether to include files in the result as well
      * @return a list of valid classpath elements as absolute paths
      */
-    public static Collection<Path> prunePaths(MavenProject project, Collection<String> paths, boolean includeFiles) {
-        final Path projectBasedir = project.getBasedir().toPath();
+    public static Collection<Path> prunePaths(Project project, Collection<String> paths, boolean includeFiles) {
+        final Path projectBasedir = project.getBasedir();
 
         Set<Path> pruned = new LinkedHashSet<>(paths.size());
         for (String path : paths) {
@@ -154,7 +154,7 @@ public class JavadocUtil {
      * @param dirs the collection of directories that will be validated
      * @return a list of valid classpath elements as absolute paths
      */
-    public static Collection<Path> pruneDirs(MavenProject project, Collection<String> dirs) {
+    public static Collection<Path> pruneDirs(Project project, Collection<String> dirs) {
         return prunePaths(project, dirs, false);
     }
 
@@ -743,7 +743,7 @@ public class JavadocUtil {
      * @param userSettingsFile reference to user settings file, could be null.
      * @param globalToolchainsFile reference to toolchains file, could be null.
      * @param userToolchainsFile reference to user toolchains file, could be null.
-     * @throws MojoExecutionException when the build fails or Maven cannot be started
+     * @throws MojoException when the build fails or Maven cannot be started
      * @since 2.6
      */
     protected static void invokeMaven(
@@ -757,7 +757,7 @@ public class JavadocUtil {
             File userSettingsFile,
             File globalToolchainsFile,
             File userToolchainsFile)
-            throws MojoExecutionException {
+            throws MojoException {
         if (projectFile == null) {
             throw new IllegalArgumentException("projectFile should be not null.");
         }
@@ -857,15 +857,15 @@ public class JavadocUtil {
                 // see DefaultMaven
                 if (!invokerLogContent.contains("Scanning for projects...")
                         || invokerLogContent.contains(OutOfMemoryError.class.getName())) {
-                    throw new MojoExecutionException(ERROR_INIT_VM);
+                    throw new MojoException(ERROR_INIT_VM);
                 }
 
-                throw new MojoExecutionException(
+                throw new MojoException(
                         "Error when invoking Maven, consult the invoker log file: " + invokerLog.getAbsolutePath());
             } catch (IOException ex) {
                 // ignore
             }
-            throw new MojoExecutionException(ERROR_INIT_VM);
+            throw new MojoException(ERROR_INIT_VM);
         }
     }
 
@@ -988,7 +988,7 @@ public class JavadocUtil {
      * @param properties could be null
      * @param mavenOpts could be null
      * @return the execution result
-     * @throws MojoExecutionException if any
+     * @throws MojoException if any
      * @since 2.6
      */
     private static ExecutorResult invoke(
@@ -999,7 +999,7 @@ public class JavadocUtil {
             List<String> goals,
             Properties properties,
             String mavenOpts)
-            throws MojoExecutionException {
+            throws MojoException {
         PrintStream ps;
         OutputStream os = null;
         if (invokerLog != null) {
@@ -1064,9 +1064,9 @@ public class JavadocUtil {
                 return executor.execute(request.stdOut(output).stdErr(output).build());
             }
         } catch (IOException ioe) {
-            throw new MojoExecutionException("IOException while consuming invocation output", ioe);
+            throw new MojoException("IOException while consuming invocation output", ioe);
         } catch (ExecutorException e) {
-            throw new MojoExecutionException("Error when invoking Maven: " + e.getMessage(), e);
+            throw new MojoException("Error when invoking Maven: " + e.getMessage(), e);
         }
     }
 
@@ -1393,7 +1393,7 @@ public class JavadocUtil {
      * @return <code>true</code> if <code>url</code> points to a valid <code>package-list</code> resource;
      *         <code>false</code> else.
      * @throws IOException if reading the resource fails.
-     * @see #createHttpClient(org.apache.maven.settings.Settings, java.net.URL)
+     * @see #createHttpClient(org.apache.maven.api.settings.Settings, java.net.URL)
      * @since 2.8
      */
     protected static boolean isValidPackageList(URL url, Settings settings, boolean validateContent)
@@ -1528,6 +1528,19 @@ public class JavadocUtil {
     }
 
     /**
+     * The Maven 4 settings model has no {@code getActiveProxy()}; the first active proxy is the equivalent.
+     */
+    static Proxy getActiveProxy(Settings settings) {
+        if (settings == null) {
+            return null;
+        }
+        return settings.getProxies().stream()
+                .filter(Proxy::isActive)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Creates a new {@code HttpClient} instance.
      *
      * @param settings the settings to use for setting up the client or {@code null}
@@ -1558,8 +1571,8 @@ public class JavadocUtil {
         // Some servers reject requests that do not have an Accept header
         builder.setDefaultHeaders(Collections.singletonList(new BasicHeader(HttpHeaders.ACCEPT, "*/*")));
 
-        if (settings != null && settings.getActiveProxy() != null) {
-            Proxy activeProxy = settings.getActiveProxy();
+        Proxy activeProxy = getActiveProxy(settings);
+        if (activeProxy != null) {
             String nonProxyHosts = activeProxy.getNonProxyHosts();
             String activeProxyHost = activeProxy.getHost();
             if (activeProxyHost != null

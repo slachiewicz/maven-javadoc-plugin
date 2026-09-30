@@ -18,22 +18,10 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
 import java.io.File;
 
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
-import org.apache.maven.project.MavenProjectHelper;
-import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.toolchain.ToolchainManager;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
-import org.eclipse.aether.RepositorySystem;
+import org.apache.maven.api.plugin.annotations.Mojo;
+import org.apache.maven.api.plugin.annotations.Parameter;
 
 /**
  * Bundle {@link TestJavadocJarMojo#testJavadocDirectory}, along with javadoc configuration options from
@@ -44,40 +32,13 @@ import org.eclipse.aether.RepositorySystem;
  *
  * @since 2.7
  */
-@Mojo(
-        name = "test-resource-bundle",
-        defaultPhase = LifecyclePhase.PACKAGE,
-        requiresDependencyResolution = ResolutionScope.TEST,
-        threadSafe = true)
+@Mojo(name = "test-resource-bundle", defaultPhase = "package")
 public class TestResourcesBundleMojo extends ResourcesBundleMojo {
-
-    // CHECKSTYLE_OFF: ParameterNumber
-    @Inject
-    public TestResourcesBundleMojo(
-            MavenProjectHelper projectHelper,
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        super(
-                projectHelper,
-                siteTool,
-                archiverManager,
-                resourceResolver,
-                repoSystem,
-                artifactHandlerManager,
-                mavenProjectBuilder,
-                toolchainManager);
-    }
-    // CHECKSTYLE_ON: ParameterNumber
 
     /**
      * Specifies the Test Javadoc resources directory to be included in the Javadoc (i.e. package.html, images...).
      */
-    @Parameter(alias = "javadocDirectory", defaultValue = "${basedir}/src/test/javadoc")
+    @Parameter(alias = "javadocDirectory", defaultValue = "${project.basedir}/src/test/javadoc")
     private File testJavadocDirectory;
 
     @Override

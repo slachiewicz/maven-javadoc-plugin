@@ -28,5 +28,8 @@ under the License.
   <artifactId>aggregate-test-project1</artifactId>
   <packaging>jar</packaging>
   <inceptionYear>2006</inceptionYear>
+  <build>
+    <sourceDirectory>.</sourceDirectory>
+  </build>
   <name>Maven Javadoc Plugin Aggregate Project1 Test</name>
 </project>

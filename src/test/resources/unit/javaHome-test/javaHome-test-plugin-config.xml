@@ -33,9 +33,9 @@ under the License.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <sourcepath>${basedir}</sourcepath>
-          <outputDirectory>${basedir}/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/target/javadoc-bundle-options</javadocOptionsDir>
+          <sourcepath>${project.basedir}/</sourcepath>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <breakiterator>false</breakiterator>
           <old>false</old>
           <show>protected</show>
@@ -63,6 +63,12 @@ under the License.
           <windowtitle>Maven Javadoc Plugin Java Home Test 1.0-SNAPSHOT API</windowtitle>
           <debug>true</debug>
           <failOnError>true</failOnError>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

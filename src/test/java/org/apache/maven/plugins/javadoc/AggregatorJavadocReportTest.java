@@ -18,40 +18,63 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Locale;
 
-import org.apache.maven.api.plugin.testing.Basedir;
-import org.apache.maven.api.plugin.testing.InjectMojo;
-import org.apache.maven.api.plugin.testing.MojoTest;
-import org.apache.maven.execution.MavenSession;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.di.Provides;
+import org.apache.maven.api.di.Singleton;
+import org.apache.maven.impl.InternalSession;
+import org.apache.maven.testing.plugin.Basedir;
+import org.apache.maven.testing.plugin.InjectMojo;
+import org.apache.maven.testing.plugin.MojoTest;
 import org.codehaus.plexus.languages.java.version.JavaVersion;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.apache.maven.api.plugin.testing.MojoExtension.getBasedir;
+import static org.apache.maven.testing.plugin.MojoExtension.getBasedir;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@MojoTest(realRepositorySession = true)
+@MojoTest
 public class AggregatorJavadocReportTest {
-
-    @Inject
-    private MavenSession mavenSession;
 
     private static final char LINE_SEPARATOR = ' ';
 
-    private File localRepo;
-
-    /** {@inheritDoc} */
-    @BeforeEach
-    public void setUp() {
-        localRepo = new File(getBasedir(), "target/local-repo/");
-        mavenSession.getRequest().setLocalRepositoryPath(localRepo);
+    /**
+     * The reactor of the aggregate tests: the aggregator and its modules, which the mojo finds through the session.
+     */
+    @Provides
+    @Singleton
+    InternalSession createSession() throws Exception {
+        InternalSession session = TestSessions.create();
+        Path basedir = Paths.get(getBasedir());
+        List<Project> reactor;
+        switch (basedir.getFileName().toString()) {
+            case "aggregate-test":
+                reactor = List.of(
+                        TestSessions.project(basedir, "aggregate-test-plugin-config.xml"),
+                        TestSessions.project(basedir.resolve("project1"), "aggregate-test-plugin-config.xml"),
+                        TestSessions.project(basedir.resolve("project2"), "aggregate-test-plugin-config.xml"));
+                break;
+            case "aggregate-resources-test":
+                reactor = List.of(
+                        TestSessions.project(basedir, "aggregate-resources-test-plugin-config.xml"),
+                        TestSessions.project(basedir.resolve("project1"), "pom.xml"),
+                        TestSessions.project(basedir.resolve("project2"), "pom.xml"));
+                break;
+            default:
+                reactor = List.of(
+                        TestSessions.project(basedir, "pom.xml"),
+                        TestSessions.project(basedir.resolveSibling("project1"), "pom.xml"),
+                        TestSessions.project(basedir.resolveSibling("project2"), "pom.xml"));
+        }
+        org.mockito.Mockito.when(session.getProjects()).thenReturn(reactor);
+        return session;
     }
 
     /**
@@ -82,13 +105,13 @@ public class AggregatorJavadocReportTest {
      *
      * @throws Exception if any
      */
-    @InjectMojo(goal = "aggregate", pom = "aggregate-test/aggregate-test-plugin-config.xml")
-    @Basedir("/unit")
+    @InjectMojo(goal = "aggregate", pom = "aggregate-test-plugin-config.xml")
+    @Basedir("${basedir}/target/test-classes/unit/aggregate-test")
     @Test
-    void testAggregate(JavadocReport mojo) throws Exception {
+    void testAggregate(AggregatorJavadocReport mojo) throws Exception {
         mojo.execute();
 
-        File apidocs = new File(getBasedir(), "aggregate-test/target/site/apidocs/");
+        File apidocs = new File(getBasedir(), "target/site/apidocs/");
 
         // check if project1 api files exist
         assertTrue(new File(apidocs, "aggregate/test/project1/Project1App.html").exists());
@@ -108,13 +131,13 @@ public class AggregatorJavadocReportTest {
      *
      * @throws Exception if any
      */
-    @InjectMojo(goal = "aggregate", pom = "aggregate-resources-test/aggregate-resources-test-plugin-config.xml")
-    @Basedir("/unit")
+    @InjectMojo(goal = "aggregate", pom = "aggregate-resources-test-plugin-config.xml")
+    @Basedir("${basedir}/target/test-classes/unit/aggregate-resources-test")
     @Test
-    void testAggregateJavadocResources(JavadocReport mojo) throws Exception {
+    void testAggregateJavadocResources(AggregatorJavadocReport mojo) throws Exception {
         mojo.execute();
 
-        File apidocs = new File(getBasedir(), "aggregate-resources-test/target/site/apidocs");
+        File apidocs = new File(getBasedir(), "target/site/apidocs");
 
         // Test overview
         File overviewSummary = getOverviewSummary(apidocs);
@@ -135,13 +158,13 @@ public class AggregatorJavadocReportTest {
         assertTrue(new File(apidocs, "resources/test/doc-files/maven-feather.png").exists());
     }
 
-    @InjectMojo(goal = "aggregate", pom = "aggregate-modules-not-in-subdirectories-test/all/pom.xml")
-    @Basedir("/unit")
+    @InjectMojo(goal = "aggregate", pom = "pom.xml")
+    @Basedir("${basedir}/target/test-classes/unit/aggregate-modules-not-in-subdirectories-test/all")
     @Test
-    void testAggregateWithModulsNotInSubDirectories(JavadocReport mojo) throws Exception {
+    void testAggregateWithModulsNotInSubDirectories(AggregatorJavadocReport mojo) throws Exception {
         mojo.execute();
 
-        File apidocs = new File(getBasedir(), "aggregate-modules-not-in-subdirectories-test/target/site/apidocs");
+        File apidocs = new File(getBasedir(), "target/site/apidocs");
         assertTrue(apidocs.isDirectory());
         assertTrue(getOverviewSummary(apidocs).isFile());
     }

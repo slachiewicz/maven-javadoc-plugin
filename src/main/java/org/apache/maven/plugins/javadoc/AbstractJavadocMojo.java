@@ -57,24 +57,33 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
-import org.apache.maven.RepositoryUtils;
-import org.apache.maven.archiver.MavenArchiver;
-import org.apache.maven.artifact.Artifact;
-import org.apache.maven.artifact.ArtifactUtils;
-import org.apache.maven.artifact.handler.ArtifactHandler;
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.artifact.versioning.ArtifactVersion;
-import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.model.Dependency;
-import org.apache.maven.model.Plugin;
-import org.apache.maven.model.Resource;
-import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.MojoExecution;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.api.Constants;
+import org.apache.maven.api.Dependency;
+import org.apache.maven.api.Language;
+import org.apache.maven.api.MojoExecution;
+import org.apache.maven.api.Node;
+import org.apache.maven.api.PathScope;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.ProjectScope;
+import org.apache.maven.api.Session;
+import org.apache.maven.api.Toolchain;
+import org.apache.maven.api.di.Inject;
+import org.apache.maven.api.model.Plugin;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.api.plugin.Mojo;
+import org.apache.maven.api.plugin.MojoException;
+import org.apache.maven.api.plugin.annotations.Parameter;
+import org.apache.maven.api.services.DependencyResolver;
+import org.apache.maven.api.services.DependencyResolverResult;
+import org.apache.maven.api.services.MavenException;
+import org.apache.maven.api.services.ProjectBuilder;
+import org.apache.maven.api.services.ProjectBuilderRequest;
+import org.apache.maven.api.services.ProjectManager;
+import org.apache.maven.api.services.ToolchainManager;
+import org.apache.maven.api.services.ToolchainManagerException;
+import org.apache.maven.api.settings.Proxy;
+import org.apache.maven.api.settings.Settings;
+import org.apache.maven.api.xml.XmlNode;
 import org.apache.maven.plugins.javadoc.options.BootclasspathArtifact;
 import org.apache.maven.plugins.javadoc.options.DocletArtifact;
 import org.apache.maven.plugins.javadoc.options.Group;
@@ -86,27 +95,19 @@ import org.apache.maven.plugins.javadoc.options.Tag;
 import org.apache.maven.plugins.javadoc.options.Taglet;
 import org.apache.maven.plugins.javadoc.options.TagletArtifact;
 import org.apache.maven.plugins.javadoc.options.io.xpp3.JavadocOptionsXpp3Writer;
+import org.apache.maven.plugins.javadoc.resolver.ArtifactSupport;
 import org.apache.maven.plugins.javadoc.resolver.JavadocBundle;
 import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
 import org.apache.maven.plugins.javadoc.resolver.SourceResolverConfig;
-import org.apache.maven.project.DefaultProjectBuildingRequest;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.project.ProjectBuildingException;
-import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.reporting.MavenReportException;
-import org.apache.maven.settings.Proxy;
-import org.apache.maven.settings.Settings;
+import org.apache.maven.shared.archiver.MavenArchiver;
 import org.apache.maven.shared.artifact.filter.resolve.AndFilter;
 import org.apache.maven.shared.artifact.filter.resolve.PatternExclusionsFilter;
 import org.apache.maven.shared.artifact.filter.resolve.PatternInclusionsFilter;
 import org.apache.maven.shared.artifact.filter.resolve.TransformableFilter;
-import org.apache.maven.toolchain.Toolchain;
-import org.apache.maven.toolchain.ToolchainManager;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.UnArchiver;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
-import org.codehaus.plexus.archiver.manager.NoSuchArchiverException;
+import org.codehaus.plexus.archiver.zip.ZipUnArchiver;
 import org.codehaus.plexus.components.io.fileselectors.IncludeExcludeFileSelector;
 import org.codehaus.plexus.languages.java.jpms.JavaModuleDescriptor;
 import org.codehaus.plexus.languages.java.jpms.LocationManager;
@@ -121,21 +122,6 @@ import org.codehaus.plexus.util.WriterFactory;
 import org.codehaus.plexus.util.cli.CommandLineException;
 import org.codehaus.plexus.util.cli.CommandLineUtils;
 import org.codehaus.plexus.util.cli.Commandline;
-import org.codehaus.plexus.util.xml.Xpp3Dom;
-import org.eclipse.aether.RepositorySystem;
-import org.eclipse.aether.RepositorySystemSession;
-import org.eclipse.aether.artifact.ArtifactTypeRegistry;
-import org.eclipse.aether.artifact.DefaultArtifact;
-import org.eclipse.aether.collection.CollectRequest;
-import org.eclipse.aether.graph.DependencyFilter;
-import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
-import org.eclipse.aether.resolution.ArtifactResult;
-import org.eclipse.aether.resolution.DependencyRequest;
-import org.eclipse.aether.resolution.DependencyResolutionException;
-import org.eclipse.aether.util.filter.AndDependencyFilter;
-import org.eclipse.aether.util.filter.PatternExclusionsDependencyFilter;
-import org.eclipse.aether.util.filter.ScopeDependencyFilter;
 
 import static org.apache.commons.lang3.SystemUtils.isJavaVersionAtLeast;
 import static org.apache.maven.plugins.javadoc.JavadocUtil.isEmpty;
@@ -150,7 +136,7 @@ import static org.apache.maven.plugins.javadoc.JavadocUtil.toList;
  * @see <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javadoc.html">The javadoc Command</a>
  * @since 2.0
  */
-public abstract class AbstractJavadocMojo extends AbstractMojo {
+public abstract class AbstractJavadocMojo implements Mojo {
     /**
      * Classifier used in the name of the javadoc-options XML file, and in the resources bundle
      * artifact that gets attached to the project. This one is used for non-test javadocs.
@@ -218,56 +204,16 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
 
     private static final JavaVersion JAVA_VERSION = JavaVersion.JAVA_SPECIFICATION_VERSION;
 
+    /**
+     * The default locale of the generated documentation.
+     */
+    protected static final Locale DEFAULT_LOCALE = Locale.ENGLISH;
+
     // ----------------------------------------------------------------------
     // Mojo components
     // ----------------------------------------------------------------------
 
-    /**
-     * SiteTool.
-     */
-    protected SiteTool siteTool;
-
-    /**
-     * Archiver manager
-     *
-     * @since 2.5
-     */
-    private ArchiverManager archiverManager;
-
     private ResourceResolver resourceResolver;
-
-    private RepositorySystem repoSystem;
-
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
-    private RepositorySystemSession repoSession;
-
-    private ArtifactHandlerManager artifactHandlerManager;
-
-    /**
-     * Project builder
-     *
-     * @since 3.0
-     */
-    private ProjectBuilder mavenProjectBuilder;
-
-    private ToolchainManager toolchainManager;
-
-    public AbstractJavadocMojo(
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        this.siteTool = siteTool;
-        this.archiverManager = archiverManager;
-        this.resourceResolver = resourceResolver;
-        this.repoSystem = repoSystem;
-        this.artifactHandlerManager = artifactHandlerManager;
-        this.mavenProjectBuilder = mavenProjectBuilder;
-        this.toolchainManager = toolchainManager;
-    }
 
     final LocationManager locationManager = new LocationManager();
 
@@ -276,28 +222,22 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     // ----------------------------------------------------------------------
 
     /**
-     * The current build session instance. This is used for
-     * toolchain manager API calls.
+     * The current build session instance.
      */
-    @Parameter(defaultValue = "${session}", readonly = true, required = true)
-    protected MavenSession session;
-
-    /**
-     * The Maven Settings.
-     *
-     * @since 2.3
-     */
-    @Parameter(defaultValue = "${settings}", readonly = true, required = true)
-    private Settings settings;
+    @Inject
+    protected Session session;
 
     /**
      * The Maven Project Object
      */
-    @Parameter(defaultValue = "${project}", readonly = true, required = true)
-    protected MavenProject project;
+    @Inject
+    protected Project project;
 
-    @Parameter(defaultValue = "${mojoExecution}", readonly = true, required = true)
+    @Inject
     protected MojoExecution mojoExecution;
+
+    @Inject
+    protected Log log;
 
     /**
      * Specify if the Javadoc plugin should operate in offline mode. If maven is run in offline
@@ -319,7 +259,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @see #docfilessubdirs
      * @since 2.1
      */
-    @Parameter(defaultValue = "${basedir}/src/main/javadoc")
+    @Parameter(defaultValue = "${project.basedir}/src/main/javadoc")
     private File javadocDirectory;
 
     /**
@@ -389,8 +329,8 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     /**
      * The projects in the reactor for aggregation report.
      */
-    @Parameter(defaultValue = "${reactorProjects}", required = true, readonly = true)
-    protected List<MavenProject> reactorProjects;
+    @Parameter(defaultValue = "${session.projects}", required = true, readonly = true)
+    protected List<Project> reactorProjects;
 
     /**
      * Set this to <code>true</code> to debug the Javadoc plugin. With this, <code>javadoc.bat(or.sh)</code>,
@@ -746,7 +686,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @see <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javadoc.html#standard-doclet-options">Javadoc option overview</a>.
      * <br/>
      */
-    @Parameter(property = "overview", defaultValue = "${basedir}/src/main/javadoc/overview.html")
+    @Parameter(property = "overview", defaultValue = "${project.basedir}/src/main/javadoc/overview.html")
     private File overview;
 
     /**
@@ -907,7 +847,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * Specifies the title to be placed near the top of the overview summary file.
      * @see <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javadoc.html#standard-doclet-options">Doclet option doctitle</a>.
      */
-    @Parameter(property = "doctitle", defaultValue = "${project.name} ${project.version} API")
+    @Parameter(property = "doctitle", defaultValue = "${project.model.name} ${project.version} API")
     private String doctitle;
 
     /**
@@ -1202,7 +1142,6 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * If the goal is run indirectly as part of a site generation, the shared output directory configured in the
      * <a href="https://maven.apache.org/plugins/maven-site-plugin/site-mojo.html#outputDirectory">Maven Site Plugin</a>
      * is used instead.
-     * @see org.apache.maven.reporting.AbstractMavenReport#outputDirectory
      * @see <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javadoc.html#additional-options-provided-by-the-standard-doclet">Doclet option d</a>
      */
     @Parameter(defaultValue = "${project.build.directory}/reports", required = true)
@@ -1458,7 +1397,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * Specifies the title to be placed in the HTML title tag.
      * @see <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javadoc.html#standard-doclet-options">Doclet option windowtitle</a>.
      */
-    @Parameter(property = "windowtitle", defaultValue = "${project.name} ${project.version} API")
+    @Parameter(property = "windowtitle", defaultValue = "${project.model.name} ${project.version} API")
     private String windowtitle;
 
     /**
@@ -1699,7 +1638,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
 
     /**
      * Method that returns the plugin report output directory where the generated Javadoc report will be put
-     * beneath {@link #getOutputDirectory()}/{@link org.apache.maven.reporting.AbstractMavenReport#getReportOutputDirectory()}.
+     * beneath {@link #getOutputDirectory()}.
      *
      * @return a String that contains the target directory
      */
@@ -1707,8 +1646,47 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         return getOutputDirectory() + "/" + (isTest() ? "test" : "") + "apidocs";
     }
 
-    protected MavenProject getProject() {
+    protected Project getProject() {
         return project;
+    }
+
+    protected Log getLog() {
+        return log;
+    }
+
+    /**
+     * The Maven 4 {@link ProjectManager}. It is not bound for injection into a mojo, so it is taken from the session.
+     *
+     * @return the project manager
+     */
+    protected ProjectManager getProjectManager() {
+        return session.getService(ProjectManager.class);
+    }
+
+    /**
+     * @return the id of this plugin, {@code groupId:artifactId:version}
+     */
+    protected String pluginId() {
+        org.apache.maven.api.plugin.descriptor.PluginDescriptor descriptor =
+                mojoExecution.getPlugin().getDescriptor();
+        return descriptor.getGroupId() + ":" + descriptor.getArtifactId() + ":" + descriptor.getVersion();
+    }
+
+    /**
+     * @param p a project
+     * @return whether the project is built from Java sources, which is also assumed when it declares no language
+     */
+    protected static boolean isJavaProject(Project p) {
+        Language language = p.getLanguage();
+        return language == null || Language.JAVA_FAMILY.id().equals(language.id());
+    }
+
+    /**
+     * @param p a project
+     * @return whether the project has the {@code pom} packaging
+     */
+    protected static boolean isPomPackaging(Project p) {
+        return "pom".equalsIgnoreCase(p.getPackaging().type().id());
     }
 
     /**
@@ -1716,7 +1694,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @return the list of directories where compiled classes are placed for the given project. These dirs are
      *         added to the javadoc classpath.
      */
-    protected List<File> getProjectBuildOutputDirs(MavenProject p) {
+    protected List<File> getProjectBuildOutputDirs(Project p) {
         if (StringUtils.isEmpty(p.getBuild().getOutputDirectory())) {
             return Collections.emptyList();
         }
@@ -1728,20 +1706,18 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @param project the project in which to find a classes file
      * @return null, the attached artifact file, or outputDirectory.
      */
-    protected File getClassesFile(MavenProject project) {
+    protected File getClassesFile(Project project) {
         if (!isAggregator() && isTest()) {
             return null;
         }
 
-        if (project.getArtifact() != null && project.getArtifact().getFile() != null) {
-            File artifactFile = project.getArtifact().getFile();
-            if (artifactFile.isDirectory() || artifactFile.getName().endsWith(".jar")) {
-                return artifactFile;
-            }
-        } else if (project.getExecutionProject() != null
-                && project.getExecutionProject().getArtifact() != null
-                && project.getExecutionProject().getArtifact().getFile() != null) {
-            File artifactFile = project.getExecutionProject().getArtifact().getFile();
+        ProjectManager projectManager = getProjectManager();
+        Optional<Path> artifactPath = projectManager.getPath(project);
+        if (!artifactPath.isPresent()) {
+            artifactPath = projectManager.getExecutionProject(project).flatMap(projectManager::getPath);
+        }
+        if (artifactPath.isPresent()) {
+            File artifactFile = artifactPath.get().toFile();
             if (artifactFile.isDirectory() || artifactFile.getName().endsWith(".jar")) {
                 return artifactFile;
             }
@@ -1755,31 +1731,35 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     }
 
     /**
+     * @return the scope of the source roots and dependencies of this goal
+     */
+    protected ProjectScope getProjectScope() {
+        return isTest() ? ProjectScope.TEST : ProjectScope.MAIN;
+    }
+
+    /**
      * @param p not null maven project
      * @return the list of source paths for the given project
      */
-    protected List<String> getProjectSourceRoots(MavenProject p) {
-        if ("pom".equals(p.getPackaging().toLowerCase(Locale.ENGLISH))) {
+    protected List<String> getProjectSourceRoots(Project p) {
+        if (isPomPackaging(p)) {
             return Collections.emptyList();
         }
 
-        return p.getCompileSourceRoots() == null
-                ? Collections.emptyList()
-                : new LinkedList<>(p.getCompileSourceRoots());
+        return new LinkedList<>(ArtifactSupport.sourceRoots(session, p, getProjectScope()));
     }
 
     /**
      * @param p not null maven project
      * @return the list of source paths for the execution project of the given project
      */
-    protected List<String> getExecutionProjectSourceRoots(MavenProject p) {
-        if ("pom".equals(p.getExecutionProject().getPackaging().toLowerCase(Locale.ENGLISH))) {
+    protected List<String> getExecutionProjectSourceRoots(Project p) {
+        Project executionProject = getProjectManager().getExecutionProject(p).orElse(p);
+        if (isPomPackaging(executionProject)) {
             return Collections.emptyList();
         }
 
-        return p.getExecutionProject().getCompileSourceRoots() == null
-                ? Collections.emptyList()
-                : new LinkedList<>(p.getExecutionProject().getCompileSourceRoots());
+        return new LinkedList<>(ArtifactSupport.sourceRoots(session, executionProject, getProjectScope()));
     }
 
     /**
@@ -1808,6 +1788,23 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      */
     protected File getOverview() {
         return overview;
+    }
+
+    /**
+     * The default titles use {@code ${project.model.name}} because the plugin parameter evaluation of Maven 4 knows
+     * no {@code ${project.name}}. Unlike {@code MavenProject#getName()}, the model has no fallback to the artifact
+     * id, and an expression that evaluates to nothing is left in the text, so it is resolved here.
+     *
+     * @param title a title, possibly containing the placeholder of the project name
+     * @return the title with the name of the project, or its artifact id if it has no name
+     */
+    private String withProjectName(String title) {
+        final String placeholder = "${project.model.name}";
+        if (title == null || !title.contains(placeholder)) {
+            return title;
+        }
+        String name = project.getModel().getName();
+        return title.replace(placeholder, name == null || name.isEmpty() ? project.getArtifactId() : name);
     }
 
     /**
@@ -1841,7 +1838,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     }
 
     @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
+    public void execute() throws MojoException {
         verifyRemovedParameter("aggregator");
         verifyRemovedParameter("proxyHost");
         verifyRemovedParameter("proxyPort");
@@ -1850,12 +1847,12 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         doExecute();
     }
 
-    protected abstract void doExecute() throws MojoExecutionException, MojoFailureException;
+    protected abstract void doExecute() throws MojoException;
 
     protected final void verifyRemovedParameter(String paramName) {
-        Xpp3Dom configDom = mojoExecution.getConfiguration();
+        XmlNode configDom = mojoExecution.getConfiguration().orElse(null);
         if (configDom != null) {
-            if (configDom.getChild(paramName) != null) {
+            if (configDom.child(paramName) != null) {
                 throw new IllegalArgumentException(
                         "parameter '" + paramName + "' has been removed from the plugin, please verify documentation.");
             }
@@ -1863,9 +1860,9 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     }
 
     private void verifyReplacedParameter(String oldParamName, String newParamNew) {
-        Xpp3Dom configDom = mojoExecution.getConfiguration();
+        XmlNode configDom = mojoExecution.getConfiguration().orElse(null);
         if (configDom != null) {
-            if (configDom.getChild(oldParamName) != null) {
+            if (configDom.child(oldParamName) != null) {
                 throw new IllegalArgumentException("parameter '" + oldParamName + "' has been replaced with "
                         + newParamNew + ", please verify documentation.");
             }
@@ -2128,17 +2125,17 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      *
      * @return a Map of the project absolute source paths per projects key (G:A)
      * @throws MavenReportException {@link MavenReportException} issue while generating report
-     * @see JavadocUtil#pruneDirs(MavenProject, Collection)
+     * @see JavadocUtil#pruneDirs(Project, Collection)
      */
     protected Collection<JavadocModule> getSourcePaths() throws MavenReportException {
         Collection<JavadocModule> mappedSourcePaths = new ArrayList<>();
 
         if (sourcepath == null || sourcepath.isEmpty()) {
-            if (!"pom".equals(project.getPackaging())) {
+            if (!isPomPackaging(project)) {
                 Set<Path> sourcePaths =
                         new LinkedHashSet<>(JavadocUtil.pruneDirs(project, getProjectSourceRoots(project)));
 
-                if (project.getExecutionProject() != null) {
+                if (getProjectManager().getExecutionProject(project).isPresent()) {
                     sourcePaths.addAll(JavadocUtil.pruneDirs(project, getExecutionProjectSourceRoots(project)));
                 }
 
@@ -2162,27 +2159,25 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             }
 
             if (isAggregator()) {
-                for (MavenProject subProject : getAggregatedProjects()) {
-                    if (subProject != project) {
+                for (Project subProject : getAggregatedProjects()) {
+                    if (!isSameProject(subProject, project)) {
                         Collection<Path> additionalSourcePaths = new ArrayList<>();
 
                         List<String> sourceRoots = new ArrayList<>(getProjectSourceRoots(subProject));
 
-                        if (subProject.getExecutionProject() != null) {
+                        if (getProjectManager().getExecutionProject(subProject).isPresent()) {
                             sourceRoots.addAll(getExecutionProjectSourceRoots(subProject));
                         }
 
-                        ArtifactHandler artifactHandler =
-                                subProject.getArtifact().getArtifactHandler();
-                        if ("java".equals(artifactHandler.getLanguage())) {
+                        if (isJavaProject(subProject)) {
                             additionalSourcePaths.addAll(JavadocUtil.pruneDirs(subProject, sourceRoots));
                         }
 
                         if (getJavadocDirectory() != null) {
-                            Path base = project.getBasedir().toPath();
+                            Path base = project.getBasedir();
                             Path relative = base.relativize(
                                     getJavadocDirectory().toPath().toAbsolutePath());
-                            Path javadocDir = subProject.getBasedir().toPath().resolve(relative);
+                            Path javadocDir = subProject.getBasedir().resolve(relative);
                             if (Files.isDirectory(javadocDir)) {
                                 Collection<Path> l = JavadocUtil.pruneDirs(
                                         subProject,
@@ -2212,27 +2207,21 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             }
 
             if (!sourcePaths.isEmpty()) {
-                mappedSourcePaths.add(new JavadocModule(
-                        ArtifactUtils.key(project.getGroupId(), project.getArtifactId(), project.getVersion()),
-                        getClassesFile(project),
-                        sourcePaths));
+                mappedSourcePaths.add(new JavadocModule(key(project), getClassesFile(project), sourcePaths));
             }
         }
 
         return mappedSourcePaths;
     }
 
-    private JavadocModule buildJavadocModule(MavenProject project, Collection<Path> sourcePaths) {
+    private JavadocModule buildJavadocModule(Project project, Collection<Path> sourcePaths) {
         File classessFile = getClassesFile(project);
         ResolvePathResult resolvePathResult = getResolvePathResult(classessFile);
         if (resolvePathResult == null) {
-            return new JavadocModule(
-                    ArtifactUtils.key(project.getGroupId(), project.getArtifactId(), project.getVersion()),
-                    classessFile,
-                    sourcePaths);
+            return new JavadocModule(key(project), classessFile, sourcePaths);
         } else {
             return new JavadocModule(
-                    ArtifactUtils.key(project.getGroupId(), project.getArtifactId(), project.getVersion()),
+                    key(project),
                     classessFile,
                     sourcePaths,
                     resolvePathResult.getModuleDescriptor(),
@@ -2246,27 +2235,26 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @param aggregatedProject the project being aggregated
      * @param reactorProjectsMap map of (still) available reactor projects
      */
-    private Set<MavenProject> modulesForAggregatedProject(
-            MavenProject aggregatedProject, Map<Path, MavenProject> reactorProjectsMap) {
+    private Set<Project> modulesForAggregatedProject(Project aggregatedProject, Map<Path, Project> reactorProjectsMap) {
         // Maven does not supply an easy way to get the projects representing
         // the modules of a project. So we will get the paths to the base
         // directories of the modules from the project and compare with the
         // base directories of the projects in the reactor.
 
-        if (aggregatedProject.getModules().isEmpty()) {
+        if (aggregatedProject.getModel().getModules().isEmpty()) {
             return Collections.singleton(aggregatedProject);
         }
 
-        Path basePath = aggregatedProject.getBasedir().toPath();
+        Path basePath = aggregatedProject.getBasedir();
         List<Path> modulePaths = new LinkedList<>();
-        for (String module : aggregatedProject.getModules()) {
+        for (String module : aggregatedProject.getModel().getModules()) {
             modulePaths.add(basePath.resolve(module).normalize());
         }
 
-        Set<MavenProject> aggregatedModules = new LinkedHashSet<>();
+        Set<Project> aggregatedModules = new LinkedHashSet<>();
 
         for (Path modulePath : modulePaths) {
-            MavenProject module = reactorProjectsMap.remove(modulePath);
+            Project module = reactorProjectsMap.remove(modulePath);
             if (module != null) {
                 aggregatedModules.addAll(modulesForAggregatedProject(module, reactorProjectsMap));
             }
@@ -2305,9 +2293,8 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         final SourceResolverConfig config = getDependencySourceResolverConfig();
 
         try {
-            return resourceResolver.resolveDependencySourcePaths(config);
-        } catch (org.apache.maven.artifact.resolver.ArtifactResolutionException
-                | org.apache.maven.artifact.resolver.ArtifactNotFoundException e) {
+            return getResourceResolver().resolveDependencySourcePaths(config);
+        } catch (MavenException e) {
             throw new MavenReportException(
                     "Failed to resolve one or more javadoc source/resource artifacts:\n\n" + e.getMessage(), e);
         }
@@ -2318,10 +2305,10 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * (verified via groupId and artifactId).
      */
     private TransformableFilter createDependencyArtifactFilter() {
-        Set<Artifact> dependencyArtifacts = project.getDependencyArtifacts();
+        Collection<Dependency> dependencyArtifacts = getDirectDependencies().keySet();
 
         List<String> artifactPatterns = new ArrayList<>(dependencyArtifacts.size());
-        for (Artifact artifact : dependencyArtifacts) {
+        for (Dependency artifact : dependencyArtifacts) {
             artifactPatterns.add(artifact.getGroupId() + ":" + artifact.getArtifactId());
         }
 
@@ -2354,15 +2341,16 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             }
         }
 
-        return configureDependencySourceResolution(
-                        new SourceResolverConfig(project, getProjectBuildingRequest(project), sourceDependencyCacheDir)
-                                .withReactorProjects(this.reactorProjects))
+        return configureDependencySourceResolution(new SourceResolverConfig(session, project, sourceDependencyCacheDir)
+                        .withReactorProjects(this.reactorProjects))
                 .withFilter(new AndFilter(andFilters));
     }
 
-    private ProjectBuildingRequest getProjectBuildingRequest(MavenProject currentProject) {
-        return new DefaultProjectBuildingRequest(session.getProjectBuildingRequest())
-                .setRemoteRepositories(currentProject.getRemoteArtifactRepositories());
+    private ResourceResolver getResourceResolver() {
+        if (resourceResolver == null) {
+            resourceResolver = new ResourceResolver();
+        }
+        return resourceResolver;
     }
 
     /**
@@ -2479,49 +2467,109 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         return result;
     }
 
-    private List<org.eclipse.aether.graph.Dependency> toResolverDependencies(List<Dependency> dependencies) {
-        if (dependencies == null) {
-            return null;
+    /**
+     * The scope of the dependencies resolved for the classpath of this goal.
+     *
+     * @return {@link PathScope#MAIN_COMPILE}, or {@link PathScope#TEST_COMPILE} for the test goals
+     */
+    protected PathScope getDependencyPathScope() {
+        return isTest() ? PathScope.TEST_COMPILE : PathScope.MAIN_COMPILE;
+    }
+
+    private DependencyResolverResult projectDependencies;
+
+    private synchronized DependencyResolverResult getProjectDependencies() throws MavenReportException {
+        if (projectDependencies == null) {
+            try {
+                projectDependencies = session.getService(DependencyResolver.class)
+                        .resolve(session, project, getDependencyPathScope());
+            } catch (MavenException e) {
+                throw new MavenReportException(e.getMessage(), e);
+            }
         }
-        ArtifactTypeRegistry registry = RepositoryUtils.newArtifactTypeRegistry(artifactHandlerManager);
-        return dependencies.stream()
-                .map(d -> RepositoryUtils.toDependency(d, registry))
-                .collect(Collectors.toList());
+        return projectDependencies;
     }
 
     /**
-     * Method that gets the classpath and modulepath elements that will be specified in the javadoc
-     * <code>-classpath</code> and <code>--module-path</code> parameter.
-     * Since we have all the sources of the current reactor, it is sufficient to consider the
-     * dependencies of the reactor modules, excluding the module artifacts which may not yet be available
-     * when the reactor project is built for the first time.
+     * Replaces {@code MavenProject#getArtifacts()}. The test goals also got the {@code runtime} scope dependencies
+     * in Maven 3, which no single Maven 4 path scope includes together with {@code provided} and {@code test}.
      *
-     * @return all classpath elements
-     * @throws MavenReportException if any.
+     * @return the resolved dependencies with their files
      */
+    private Map<Dependency, Path> getProjectArtifacts() throws MavenReportException {
+        Map<Dependency, Path> artifacts =
+                new LinkedHashMap<>(getProjectDependencies().getDependencies());
+        if (isTest()) {
+            Set<String> keys = new HashSet<>();
+            artifacts.keySet().forEach(d -> keys.add(d.key()));
+            try {
+                session.getService(DependencyResolver.class)
+                        .resolve(session, project, PathScope.TEST_RUNTIME)
+                        .getDependencies()
+                        .forEach((d, path) -> {
+                            if (!keys.contains(d.key())) {
+                                artifacts.put(d, path);
+                            }
+                        });
+            } catch (MavenException e) {
+                throw new MavenReportException(e.getMessage(), e);
+            }
+        }
+        return artifacts;
+    }
+
+    /**
+     * Replaces {@code MavenProject#getDependencyArtifacts()}: the direct dependencies of the project that are
+     * resolved for the scope of this goal.
+     *
+     * @return the direct dependencies with their files
+     */
+    private Map<Dependency, Path> getDirectDependencies() {
+        DependencyResolverResult result;
+        try {
+            result = getProjectDependencies();
+        } catch (MavenReportException e) {
+            logError("Unable to resolve the dependencies: " + e.getMessage(), e);
+            return Collections.emptyMap();
+        }
+
+        Map<String, Path> paths = new HashMap<>();
+        result.getDependencies().forEach((d, path) -> paths.put(d.key(), path));
+
+        Map<Dependency, Path> direct = new LinkedHashMap<>();
+        Node root = result.getRoot();
+        if (root != null) {
+            for (Node child : root.getChildren()) {
+                Dependency dependency = child.getDependency();
+                if (dependency != null && paths.containsKey(dependency.key())) {
+                    direct.put(dependency, paths.get(dependency.key()));
+                }
+            }
+        }
+        return direct;
+    }
+
     private Collection<File> getPathElements() throws MavenReportException {
         Set<File> classpathElements = new LinkedHashSet<>();
-        Map<String, Artifact> compileArtifactMap = new LinkedHashMap<>();
+        Map<String, Map.Entry<Dependency, Path>> compileArtifactMap = new LinkedHashMap<>();
+        Set<File> systemDependencies = new LinkedHashSet<>(getSystemDependencies(project));
 
         if (isTest()) {
             classpathElements.addAll(getProjectBuildOutputDirs(project));
         }
 
-        populateCompileArtifactMap(compileArtifactMap, project.getArtifacts());
+        populateCompileArtifactMap(compileArtifactMap, getProjectArtifacts());
 
         if (isAggregator()) {
-            Collection<MavenProject> aggregatorProjects = getAggregatedProjects();
+            Collection<Project> aggregatorProjects = getAggregatedProjects();
 
-            List<String> reactorArtifacts = new ArrayList<>();
-            for (MavenProject p : aggregatorProjects) {
+            Set<String> reactorArtifacts = new HashSet<>();
+            for (Project p : aggregatorProjects) {
                 reactorArtifacts.add(p.getGroupId() + ':' + p.getArtifactId());
             }
 
-            DependencyFilter dependencyFilter = new AndDependencyFilter(
-                    new PatternExclusionsDependencyFilter(reactorArtifacts), getDependencyScopeFilter());
-
-            for (MavenProject subProject : aggregatorProjects) {
-                if (subProject != project) {
+            for (Project subProject : aggregatorProjects) {
+                if (!isSameProject(subProject, project)) {
                     File projectArtifactFile = getClassesFile(subProject);
                     if (projectArtifactFile != null) {
                         classpathElements.add(projectArtifactFile);
@@ -2537,73 +2585,107 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
                         sb.append(subProject.getArtifactId()).append(":");
                         sb.append(subProject.getVersion()).append('\n');
 
-                        List<Dependency> managedDependencies = null;
-                        if (subProject.getDependencyManagement() != null) {
-                            managedDependencies =
-                                    subProject.getDependencyManagement().getDependencies();
+                        Map<Dependency, Path> dependencies = session.getService(DependencyResolver.class)
+                                .resolve(session, subProject, getDependencyPathScope())
+                                .getDependencies();
+                        Map<Dependency, Path> filtered = new LinkedHashMap<>();
+                        for (Map.Entry<Dependency, Path> entry : dependencies.entrySet()) {
+                            Dependency dependency = entry.getKey();
+                            if (!reactorArtifacts.contains(
+                                    dependency.getGroupId() + ':' + dependency.getArtifactId())) {
+                                filtered.put(dependency, entry.getValue());
+                                sb.append(entry.getValue()).append('\n');
+                            }
                         }
-
-                        CollectRequest collRequest = new CollectRequest(
-                                toResolverDependencies(subProject.getDependencies()),
-                                toResolverDependencies(managedDependencies),
-                                subProject.getRemoteProjectRepositories());
-                        DependencyRequest depRequest = new DependencyRequest(collRequest, dependencyFilter);
-                        for (ArtifactResult artifactResult : repoSystem
-                                .resolveDependencies(repoSession, depRequest)
-                                .getArtifactResults()) {
-                            List<Artifact> artifacts =
-                                    Collections.singletonList(RepositoryUtils.toArtifact(artifactResult.getArtifact()));
-                            populateCompileArtifactMap(compileArtifactMap, artifacts);
-
-                            sb.append(artifactResult.getArtifact().getFile()).append('\n');
-                        }
+                        populateCompileArtifactMap(compileArtifactMap, filtered);
+                        systemDependencies.addAll(getSystemDependencies(subProject));
 
                         if (getLog().isDebugEnabled()) {
                             getLog().debug(sb.toString());
                         }
 
-                    } catch (DependencyResolutionException e) {
+                    } catch (MavenException e) {
                         throw new MavenReportException(e.getMessage(), e);
                     }
                 }
             }
         }
 
-        for (Artifact a : compileArtifactMap.values()) {
-            classpathElements.add(a.getFile());
+        for (Map.Entry<Dependency, Path> a : compileArtifactMap.values()) {
+            classpathElements.add(a.getValue().toFile());
         }
+        classpathElements.addAll(systemDependencies);
 
         if (additionalDependencies != null) {
-            for (Dependency dependency : additionalDependencies) {
-                Artifact artifact = resolveDependency(dependency);
-                getLog().debug("add additional artifact with path " + artifact.getFile());
-                classpathElements.add(artifact.getFile());
+            for (AdditionalDependency dependency : additionalDependencies) {
+                Path artifact = resolveDependency(dependency);
+                getLog().debug("add additional artifact with path " + artifact);
+                classpathElements.add(artifact.toFile());
             }
         }
 
         return classpathElements;
     }
 
-    protected ScopeDependencyFilter getDependencyScopeFilter() {
-        return new ScopeDependencyFilter(
-                Arrays.asList(Artifact.SCOPE_COMPILE, Artifact.SCOPE_PROVIDED, Artifact.SCOPE_SYSTEM), null);
+    /**
+     * The Maven 4 dependency resolver has no path scope that includes the {@code system} scope, so these
+     * dependencies are missing from its result. The direct ones are taken from the model instead, which does not
+     * cover {@code system} dependencies of dependencies.
+     *
+     * @param p a project
+     * @return the files of the direct {@code system} scope dependencies of the project that exist
+     */
+    private static Collection<File> getSystemDependencies(Project p) {
+        List<File> files = new ArrayList<>();
+        for (org.apache.maven.api.model.Dependency dependency : p.getModel().getDependencies()) {
+            if ("system".equals(dependency.getScope()) && StringUtils.isNotEmpty(dependency.getSystemPath())) {
+                File file = p.getBasedir().resolve(dependency.getSystemPath()).toFile();
+                if (file.exists()) {
+                    files.add(file);
+                }
+            }
+        }
+        return files;
     }
 
     /**
-     * @param dependency {@link Dependency}
-     * @return {@link Artifact}
-     * @throws MavenReportException when artifact could not be resolved
+     * @param a a project
+     * @param b another project
+     * @return whether both have the same coordinates; Maven 4 does not guarantee that the same project is always
+     *         represented by the same instance
      */
-    public Artifact resolveDependency(Dependency dependency) throws MavenReportException {
-        ArtifactTypeRegistry registry = RepositoryUtils.newArtifactTypeRegistry(artifactHandlerManager);
-        ArtifactRequest req = new ArtifactRequest(
-                RepositoryUtils.toDependency(dependency, registry).getArtifact(),
-                project.getRemoteProjectRepositories(),
-                null);
+    private static boolean isSameProject(Project a, Project b) {
+        return key(a).equals(key(b));
+    }
+
+    private static String key(Project p) {
+        return p.getGroupId() + ':' + p.getArtifactId() + ':' + p.getVersion();
+    }
+
+    /**
+     * Resolves an additional dependency, which is only the artifact itself without its transitive dependencies.
+     *
+     * @param dependency the dependency to resolve
+     * @return the path of the resolved artifact
+     * @throws MavenReportException if the artifact cannot be resolved
+     */
+    public Path resolveDependency(AdditionalDependency dependency) throws MavenReportException {
+        org.apache.maven.api.Type type =
+                session.requireType(dependency.getType() == null ? "jar" : dependency.getType());
+        String classifier = dependency.getClassifier();
+        if (classifier == null || classifier.isEmpty()) {
+            classifier = type.getClassifier();
+        }
         try {
-            ArtifactResult resolutionResult = repoSystem.resolveArtifact(repoSession, req);
-            return RepositoryUtils.toArtifact(resolutionResult.getArtifact());
-        } catch (ArtifactResolutionException e) {
+            return ArtifactSupport.resolveArtifact(
+                    session,
+                    project,
+                    dependency.getGroupId(),
+                    dependency.getArtifactId(),
+                    dependency.getVersion(),
+                    classifier,
+                    type.getExtension());
+        } catch (MavenException e) {
             throw new MavenReportException("artifact resolver problem - " + e.getMessage(), e);
         }
     }
@@ -2611,53 +2693,57 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     protected final Toolchain getToolchain() {
         Toolchain tc = null;
 
+        ToolchainManager toolchainManager = session.getService(ToolchainManager.class);
+
         if (jdkToolchain != null) {
-            List<Toolchain> tcs = toolchainManager.getToolchains(session, "jdk", jdkToolchain);
-            if (tcs != null && !tcs.isEmpty()) {
-                tc = tcs.get(0);
+            try {
+                List<Toolchain> tcs = toolchainManager.getToolchains(session, "jdk", jdkToolchain);
+                if (tcs != null && !tcs.isEmpty()) {
+                    tc = tcs.get(0);
+                }
+            } catch (ToolchainManagerException e) {
+                getLog().debug("Unable to select a jdk toolchain: " + e.getMessage(), e);
             }
         }
 
         if (tc == null) {
-            tc = toolchainManager.getToolchainFromBuildContext("jdk", session);
+            tc = toolchainManager.getToolchainFromBuildContext(session, "jdk").orElse(null);
         }
 
         return tc;
     }
 
-    /**
-     * Method to put the artifacts in the hashmap.
-     *
-     * @param compileArtifactMap the hashmap that will contain the artifacts
-     * @param artifactList       the list of artifacts that will be put in the map
-     * @throws MavenReportException if any
-     */
-    private void populateCompileArtifactMap(Map<String, Artifact> compileArtifactMap, Collection<Artifact> artifactList)
+    private void populateCompileArtifactMap(
+            Map<String, Map.Entry<Dependency, Path>> compileArtifactMap, Map<Dependency, Path> artifactList)
             throws MavenReportException {
         if (artifactList == null) {
             return;
         }
 
-        for (Artifact newArtifact : artifactList) {
-            File file = newArtifact.getFile();
+        for (Map.Entry<Dependency, Path> entry : artifactList.entrySet()) {
+            Dependency newArtifact = entry.getKey();
 
-            if (file == null) {
+            if (entry.getValue() == null) {
                 throw new MavenReportException(
                         "Error in plugin descriptor - " + "dependency was not resolved for artifact: "
                                 + newArtifact.getGroupId() + ":" + newArtifact.getArtifactId() + ":"
                                 + newArtifact.getVersion());
             }
 
-            if (compileArtifactMap.get(newArtifact.getDependencyConflictId()) != null) {
-                Artifact oldArtifact = compileArtifactMap.get(newArtifact.getDependencyConflictId());
-
-                ArtifactVersion oldVersion = new DefaultArtifactVersion(oldArtifact.getVersion());
-                ArtifactVersion newVersion = new DefaultArtifactVersion(newArtifact.getVersion());
-                if (newVersion.compareTo(oldVersion) > 0) {
-                    compileArtifactMap.put(newArtifact.getDependencyConflictId(), newArtifact);
+            String conflictId = newArtifact.getGroupId()
+                    + ':'
+                    + newArtifact.getArtifactId()
+                    + ':'
+                    + newArtifact.getExtension()
+                    + ':'
+                    + newArtifact.getClassifier();
+            Map.Entry<Dependency, Path> old = compileArtifactMap.get(conflictId);
+            if (old != null) {
+                if (newArtifact.getVersion().compareTo(old.getKey().getVersion()) > 0) {
+                    compileArtifactMap.put(conflictId, entry);
                 }
             } else {
-                compileArtifactMap.put(newArtifact.getDependencyConflictId(), newArtifact);
+                compileArtifactMap.put(conflictId, entry);
             }
         }
     }
@@ -2672,7 +2758,9 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             return null;
         }
 
-        final String inceptionYear = project.getInceptionYear();
+        final String inceptionYear = project.getModel().getInceptionYear();
+        final org.apache.maven.api.model.Organization organization =
+                project.getModel().getOrganization();
 
         // get Reproducible Builds outputTimestamp date value or the current local date.
         final LocalDate localDate = MavenArchiver.parseBuildOutputTimestamp(outputTimestamp)
@@ -2689,18 +2777,16 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             theBottom = theBottom.replace("{inceptionYear}", inceptionYear);
         }
 
-        if (project.getOrganization() == null) {
+        if (organization == null) {
             theBottom = theBottom.replace(" {organizationName}", "");
         } else {
-            if (StringUtils.isNotEmpty(project.getOrganization().getName())) {
-                if (StringUtils.isNotEmpty(project.getOrganization().getUrl())) {
+            if (StringUtils.isNotEmpty(organization.getName())) {
+                if (StringUtils.isNotEmpty(organization.getUrl())) {
                     theBottom = theBottom.replace(
                             "{organizationName}",
-                            "<a href=\"" + project.getOrganization().getUrl() + "\">"
-                                    + project.getOrganization().getName() + "</a>");
+                            "<a href=\"" + organization.getUrl() + "\">" + organization.getName() + "</a>");
                 } else {
-                    theBottom = theBottom.replace(
-                            "{organizationName}", project.getOrganization().getName());
+                    theBottom = theBottom.replace("{organizationName}", organization.getName());
                 }
             } else {
                 theBottom = theBottom.replace(" {organizationName}", "");
@@ -3251,61 +3337,43 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             return Collections.emptyList();
         }
 
-        List<String> path = new ArrayList<>();
-
         try {
-            Artifact artifact = createAndResolveArtifact(javadocArtifact);
-            path.add(artifact.getFile().getAbsolutePath());
-
-            DependencyFilter filter = new ScopeDependencyFilter(
-                    Arrays.asList(Artifact.SCOPE_COMPILE, Artifact.SCOPE_PROVIDED), Collections.emptySet());
-            DependencyRequest req = new DependencyRequest(
-                    new CollectRequest(
-                            new org.eclipse.aether.graph.Dependency(RepositoryUtils.toArtifact(artifact), null),
-                            RepositoryUtils.toRepos(project.getRemoteArtifactRepositories())),
-                    filter);
-            Iterable<ArtifactResult> deps =
-                    repoSystem.resolveDependencies(repoSession, req).getArtifactResults();
-            for (ArtifactResult a : deps) {
-                path.add(a.getArtifact().getFile().getAbsolutePath());
+            List<String> path = new ArrayList<>();
+            for (Path p : ArtifactSupport.resolveWithDependencies(
+                    session,
+                    project,
+                    javadocArtifact.getGroupId(),
+                    javadocArtifact.getArtifactId(),
+                    javadocArtifact.getVersion(),
+                    javadocArtifact.getClassifier(),
+                    "jar")) {
+                path.add(p.toAbsolutePath().toString());
             }
 
             return path;
-        } catch (ArtifactResolutionException e) {
+        } catch (MavenException e) {
             throw new MavenReportException("Unable to resolve artifact:" + javadocArtifact, e);
-        } catch (DependencyResolutionException e) {
-            throw new MavenReportException("Unable to resolve dependencies for:" + javadocArtifact, e);
         }
     }
 
     /**
-     * Creates an {@link Artifact} representing the configured {@link JavadocPathArtifact} and resolves it.
+     * Resolves the artifact that is configured with the given {@link JavadocPathArtifact}.
      *
      * @param javadocArtifact the {@link JavadocPathArtifact} to resolve
-     * @return a resolved {@link Artifact}
-     * @throws org.eclipse.aether.resolution.ArtifactResolutionException issue while resolving artifact
+     * @return the path of the resolved artifact
+     * @throws MavenException issue while resolving artifact
      */
-    private Artifact createAndResolveArtifact(JavadocPathArtifact javadocArtifact)
-            throws org.eclipse.aether.resolution.ArtifactResolutionException {
-        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(
+    private Path createAndResolveArtifact(JavadocPathArtifact javadocArtifact) {
+        return ArtifactSupport.resolveArtifact(
+                session,
+                project,
                 javadocArtifact.getGroupId(),
                 javadocArtifact.getArtifactId(),
+                javadocArtifact.getVersion(),
                 javadocArtifact.getClassifier(),
-                "jar",
-                javadocArtifact.getVersion());
-        ArtifactRequest req = new ArtifactRequest(artifact, project.getRemoteProjectRepositories(), null);
-        return RepositoryUtils.toArtifact(
-                repoSystem.resolveArtifact(repoSession, req).getArtifact());
+                "jar");
     }
 
-    /**
-     * Method that adds/sets the java memory parameters in the command line execution.
-     *
-     * @param cmd    the command line execution object where the argument will be added
-     * @param arg    the argument parameter name
-     * @param memory the JVM memory value to be set
-     * @see JavadocUtil#parseJavadocMemory(String)
-     */
     private void addMemoryArg(Commandline cmd, String arg, String memory) {
         if (memory != null && !memory.isEmpty()) {
             try {
@@ -3324,6 +3392,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @param cmd the command line execution object where the argument will be added
      */
     private void addProxyArg(Commandline cmd) {
+        Settings settings = session.getSettings();
         if (settings == null || settings.getProxies().isEmpty()) {
             return;
         }
@@ -3798,7 +3867,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
                 continue;
             }
 
-            if ((settings.isOffline() || offline) && !link.startsWith("file:")) {
+            if ((session.getSettings().isOffline() || offline) && !link.startsWith("file:")) {
                 continue;
             }
 
@@ -3877,11 +3946,12 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         }
 
         if (isAggregator()) {
-            for (MavenProject subProject : getAggregatedProjects()) {
-                if (subProject != project && getJavadocDirectory() != null) {
+            for (Project subProject : getAggregatedProjects()) {
+                if (!isSameProject(subProject, project) && getJavadocDirectory() != null) {
                     String javadocDirRelative = toRelative(
-                            project.getBasedir(), getJavadocDirectory().getAbsolutePath());
-                    File javadocDir = new File(subProject.getBasedir(), javadocDirRelative);
+                            project.getBasedir().toFile(), getJavadocDirectory().getAbsolutePath());
+                    File javadocDir =
+                            subProject.getBasedir().resolve(javadocDirRelative).toFile();
                     JavadocUtil.copyJavadocResources(anOutputDirectory, javadocDir, excludedocfilessubdir);
                 }
             }
@@ -3911,23 +3981,17 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             return;
         }
 
-        UnArchiver unArchiver;
-        try {
-            unArchiver = archiverManager.getUnArchiver("jar");
-        } catch (NoSuchArchiverException e) {
-            throw new MavenReportException(
-                    "Unable to extract resources artifact. " + "No archiver for 'jar' available.", e);
-        }
+        UnArchiver unArchiver = new ZipUnArchiver();
 
         for (ResourcesArtifact item : resourcesArtifacts) {
-            Artifact artifact;
+            Path artifact;
             try {
                 artifact = createAndResolveArtifact(item);
-            } catch (ArtifactResolutionException e) {
+            } catch (MavenException e) {
                 throw new MavenReportException("Unable to resolve artifact:" + item, e);
             }
 
-            unArchiver.setSourceFile(artifact.getFile());
+            unArchiver.setSourceFile(artifact.toFile());
             unArchiver.setDestDirectory(anOutputDirectory);
             // remove the META-INF directory from resource artifact
             IncludeExcludeFileSelector[] selectors =
@@ -3935,12 +3999,12 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             selectors[0].setExcludes(new String[] {"META-INF/**"});
             unArchiver.setFileSelectors(selectors);
 
-            getLog().debug("Extracting contents of resources artifact: " + artifact.getArtifactId());
+            getLog().debug("Extracting contents of resources artifact: " + item.getArtifactId());
             try {
                 unArchiver.extract();
             } catch (ArchiverException e) {
                 throw new MavenReportException(
-                        "Extraction of resources failed. Artifact that failed was: " + artifact.getArtifactId(), e);
+                        "Extraction of resources failed. Artifact that failed was: " + item.getArtifactId(), e);
             }
         }
     }
@@ -4227,6 +4291,50 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     }
 
     /**
+     * Selects the first usable locale of a comma separated list of locale codes. This replaces
+     * {@code SiteTool#getSiteLocales(String)}, which has no Maven 4 API counterpart (the Doxia Integration Tools
+     * need the Maven 3 core). Unlike the site tool, it does not check whether Maven Site has a translation for the
+     * locale, only whether the JVM knows it.
+     *
+     * @param locales the locale codes, like {@code en}, {@code de_CH}, {@code system} or {@code default}
+     * @return the first valid locale, {@link #DEFAULT_LOCALE} if none is valid
+     */
+    static Locale getSiteLocale(String locales) {
+        if (locales == null) {
+            return DEFAULT_LOCALE;
+        }
+
+        List<Locale> availableLocales = Arrays.asList(Locale.getAvailableLocales());
+        for (String localeCode : StringUtils.split(locales, ",")) {
+            Locale locale = codeToLocale(localeCode);
+            if (locale != null && availableLocales.contains(locale)) {
+                return locale;
+            }
+        }
+        return DEFAULT_LOCALE;
+    }
+
+    private static Locale codeToLocale(String localeCode) {
+        if ("system".equalsIgnoreCase(localeCode)) {
+            return Locale.getDefault();
+        }
+
+        if ("default".equalsIgnoreCase(localeCode)) {
+            return DEFAULT_LOCALE;
+        }
+
+        StringTokenizer tokenizer = new StringTokenizer(localeCode, "_");
+        if (tokenizer.countTokens() > 3) {
+            return null;
+        }
+
+        String language = tokenizer.hasMoreTokens() ? tokenizer.nextToken() : "";
+        String country = tokenizer.hasMoreTokens() ? tokenizer.nextToken() : "";
+        String variant = tokenizer.hasMoreTokens() ? tokenizer.nextToken() : "";
+        return new Locale(language, country, variant);
+    }
+
+    /**
      * Checks for the validity of the Javadoc options used by the user.
      *
      * @throws MavenReportException if error
@@ -4239,7 +4347,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
 
         // locale
         if (StringUtils.isNotEmpty(this.locale)) {
-            this.locale = siteTool.getSiteLocales(locale).get(0).toString();
+            this.locale = getSiteLocale(locale).toString();
         }
     }
 
@@ -4317,13 +4425,10 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         if (breakiterator) {
             addArgIf(arguments, breakiterator, "-breakiterator");
         }
-        List<MavenProject> aggregatedProjects = reactorProjects; // getAggregatedProjects();
-        Map<String, MavenProject> reactorKeys = new HashMap<>(aggregatedProjects.size());
-        for (MavenProject reactorProject : aggregatedProjects) {
-            reactorKeys.put(
-                    ArtifactUtils.key(
-                            reactorProject.getGroupId(), reactorProject.getArtifactId(), reactorProject.getVersion()),
-                    reactorProject);
+        List<Project> aggregatedProjects = reactorProjects; // getAggregatedProjects();
+        Map<String, Project> reactorKeys = new HashMap<>(aggregatedProjects.size());
+        for (Project reactorProject : aggregatedProjects) {
+            reactorKeys.put(key(reactorProject), reactorProject);
         }
 
         Map<String, JavaModuleDescriptor> allModuleDescriptors = new HashMap<>();
@@ -4372,7 +4477,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         if (supportModulePath && !allModuleDescriptors.isEmpty()) {
             Collection<String> unnamedProjects = new ArrayList<>();
             for (JavadocModule javadocModule : allSourcePaths) {
-                MavenProject aggregatedProject = reactorKeys.get(javadocModule.getGav());
+                Project aggregatedProject = reactorKeys.get(javadocModule.getGav());
                 if (aggregatedProject != null && !"pom".equals(aggregatedProject.getPackaging())) {
                     ResolvePathResult result = null;
 
@@ -4424,7 +4529,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
                         unnamedProjects.add(javadocModule.getGav());
                     }
 
-                    if (aggregatedProject.equals(getProject())) {
+                    if (isSameProject(aggregatedProject, getProject())) {
                         mainResolvePathResult = result;
                     }
                 } else {
@@ -4691,7 +4796,8 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
 
         addArgIf(arguments, (doclint != null && !doclint.isEmpty()), "-Xdoclint:" + getDoclint(), SINCE_JAVADOC_1_8);
 
-        addArgIfNotEmpty(arguments, "-doctitle", JavadocUtil.quotedArgument(getDoctitle()), false, false);
+        addArgIfNotEmpty(
+                arguments, "-doctitle", JavadocUtil.quotedArgument(withProjectName(getDoctitle())), false, false);
 
         if (docfilessubdirs) {
             addArgIfNotEmpty(
@@ -4777,7 +4883,8 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
 
         addArgIf(arguments, version, "-version");
 
-        addArgIfNotEmpty(arguments, "-windowtitle", JavadocUtil.quotedArgument(getWindowtitle()), false, false);
+        addArgIfNotEmpty(
+                arguments, "-windowtitle", JavadocUtil.quotedArgument(withProjectName(getWindowtitle())), false, false);
     }
 
     /**
@@ -4903,14 +5010,14 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             if ((StringUtils.isNotEmpty(aTagletArtifact.getGroupId()))
                     && (StringUtils.isNotEmpty(aTagletArtifact.getArtifactId()))
                     && (StringUtils.isNotEmpty(aTagletArtifact.getVersion()))) {
-                Artifact artifact;
+                Path artifact;
                 try {
                     artifact = createAndResolveArtifact(aTagletArtifact);
-                } catch (ArtifactResolutionException e) {
+                } catch (MavenException e) {
                     throw new MavenReportException("Unable to resolve artifact:" + aTagletArtifact, e);
                 }
 
-                tagletsPath.add(artifact.getFile().getAbsolutePath());
+                tagletsPath.add(artifact.toAbsolutePath().toString());
             }
         }
 
@@ -5184,8 +5291,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             inputResourceName = inputResourceName.replaceFirst("//*", "");
         }
 
-        List<String> classPath = new ArrayList<>();
-        classPath.add(project.getBuild().getSourceDirectory());
+        List<String> classPath = new ArrayList<>(ArtifactSupport.sourceRoots(session, project, ProjectScope.MAIN));
 
         URL resourceURL = getResource(classPath, inputResourceName);
         if (resourceURL != null) {
@@ -5194,10 +5300,10 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         }
 
         classPath.clear();
-        List<Resource> resources = project.getBuild().getResources();
-        for (Resource resource : resources) {
-            classPath.add(resource.getDirectory());
-        }
+        getProjectManager()
+                .getEnabledSourceRoots(project, ProjectScope.MAIN, Language.RESOURCES)
+                .map(root -> project.getBasedir().resolve(root.directory()).toString())
+                .forEach(classPath::add);
         resourceURL = getResource(classPath, inputResourceName);
         if (resourceURL != null) {
             getLog().debug(inputResourceName + " found in the main resources directories of the project.");
@@ -5218,22 +5324,22 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         final String pluginId = "org.apache.maven.plugins:maven-javadoc-plugin";
         Plugin javadocPlugin = getPlugin(project, pluginId);
         if (javadocPlugin != null && javadocPlugin.getDependencies() != null) {
-            List<Dependency> dependencies = javadocPlugin.getDependencies();
-            for (Dependency dependency : dependencies) {
+            List<org.apache.maven.api.model.Dependency> dependencies = javadocPlugin.getDependencies();
+            for (org.apache.maven.api.model.Dependency dependency : dependencies) {
                 ResourcesArtifact resourceArtifact = new ResourcesArtifact();
                 resourceArtifact.setGroupId(dependency.getGroupId());
                 resourceArtifact.setArtifactId(dependency.getArtifactId());
                 resourceArtifact.setVersion(dependency.getVersion());
                 resourceArtifact.setClassifier(dependency.getClassifier());
-                Artifact artifact = null;
+                Path artifact = null;
                 try {
                     artifact = createAndResolveArtifact(resourceArtifact);
                 } catch (Exception e) {
                     logError("Unable to retrieve the dependency: " + dependency + ". Ignored.", e);
                 }
 
-                if (artifact != null && artifact.getFile().exists()) {
-                    classPath.add(artifact.getFile().getAbsolutePath());
+                if (artifact != null && Files.exists(artifact)) {
+                    classPath.add(artifact.toAbsolutePath().toString());
                 }
             }
             resourceURL = getResource(classPath, inputResourceName);
@@ -5335,7 +5441,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @since 2.6
      */
     private List<OfflineLink> getModulesLinks() throws MavenReportException {
-        List<MavenProject> aggregatedProjects = reactorProjects;
+        List<Project> aggregatedProjects = reactorProjects;
         if (!isDetectOfflineLinks() || isAggregator() || aggregatedProjects.isEmpty()) {
             return Collections.emptyList();
         }
@@ -5343,19 +5449,19 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         getLog().debug("Trying to add links for modules...");
 
         Set<String> dependencyArtifactIds = new HashSet<>();
-        final Set<Artifact> dependencyArtifacts = project.getDependencyArtifacts();
-        for (Artifact artifact : dependencyArtifacts) {
-            dependencyArtifactIds.add(artifact.getId());
+        for (Dependency artifact : getDirectDependencies().keySet()) {
+            dependencyArtifactIds.add(
+                    artifact.getGroupId() + ':' + artifact.getArtifactId() + ':' + artifact.getBaseVersion());
         }
 
         List<OfflineLink> modulesLinks = new ArrayList<>();
-        String javadocDirRelative = toRelative(project.getBasedir(), getPluginReportOutputDirectory());
-        for (MavenProject p : aggregatedProjects) {
-            if (!dependencyArtifactIds.contains(p.getArtifact().getId()) || (p.getUrl() == null)) {
+        String javadocDirRelative = toRelative(project.getBasedir().toFile(), getPluginReportOutputDirectory());
+        for (Project p : aggregatedProjects) {
+            if (!dependencyArtifactIds.contains(key(p)) || (p.getModel().getUrl() == null)) {
                 continue;
             }
 
-            File location = new File(p.getBasedir(), javadocDirRelative);
+            File location = p.getBasedir().resolve(javadocDirRelative).toFile();
 
             if (!location.exists()) {
                 String javadocGoal = getFullJavadocGoal();
@@ -5371,17 +5477,17 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
                 try {
                     JavadocUtil.invokeMaven(
                             getLog(),
-                            session.getRepositorySession().getLocalRepository().getBasedir(),
-                            p.getFile(),
+                            session.getLocalRepository().getPath().toFile(),
+                            p.getPomPath().toFile(),
                             Collections.singletonList(javadocGoal),
                             null,
                             invokerLogFile,
-                            session.getRequest().getGlobalSettingsFile(),
-                            session.getRequest().getUserSettingsFile(),
-                            session.getRequest().getGlobalToolchainsFile(),
-                            session.getRequest().getUserToolchainsFile());
-                } catch (MojoExecutionException e) {
-                    logError("MojoExecutionException: " + e.getMessage(), e);
+                            effectiveFile(Constants.MAVEN_INSTALLATION_SETTINGS),
+                            effectiveFile(Constants.MAVEN_USER_SETTINGS),
+                            effectiveFile(Constants.MAVEN_INSTALLATION_TOOLCHAINS),
+                            effectiveFile(Constants.MAVEN_USER_TOOLCHAINS));
+                } catch (MojoException e) {
+                    logError("MojoException: " + e.getMessage(), e);
 
                     try {
                         String invokerLogContent =
@@ -5432,6 +5538,18 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @see #isValidJavadocLink(String, boolean)
      * @since 2.6
      */
+    /**
+     * The Maven 4 session does not expose the settings and toolchains files that were selected with {@code -s},
+     * {@code -gs}, {@code -t} or {@code -gt}, only the configured defaults.
+     *
+     * @param property the name of the configuration property with the file location
+     * @return the file, or {@code null} if unknown
+     */
+    private File effectiveFile(String property) {
+        String value = session.getEffectiveProperties().get(property);
+        return value == null || value.isEmpty() ? null : new File(value);
+    }
+
     private List<String> getDependenciesLinks() {
         if (!detectLinks) {
             return Collections.emptyList();
@@ -5441,9 +5559,10 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
 
         List<String> dependenciesLinks = new ArrayList<>();
 
-        final Set<Artifact> dependencies = project.getDependencyArtifacts();
-        for (Artifact artifact : dependencies) {
-            if (artifact.getFile() == null || !artifact.getFile().exists()) {
+        final Map<Dependency, Path> dependencies = getDirectDependencies();
+        for (Dependency artifact : dependencies.keySet()) {
+            Path artifactFile = dependencies.get(artifact);
+            if (artifactFile == null || !Files.exists(artifactFile)) {
                 continue;
             }
 
@@ -5458,20 +5577,34 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
                 detected = false;
             } else {
                 try {
-                    MavenProject artifactProject = mavenProjectBuilder
-                            .build(artifact, getProjectBuildingRequest(project))
-                            .getProject();
+                    Path pom = ArtifactSupport.resolveArtifact(
+                            session,
+                            project,
+                            artifact.getGroupId(),
+                            artifact.getArtifactId(),
+                            artifact.getVersion().toString(),
+                            "",
+                            "pom");
+                    Project artifactProject = session.getService(ProjectBuilder.class)
+                            .build(ProjectBuilderRequest.builder()
+                                    .session(session)
+                                    .path(pom)
+                                    .processPlugins(false)
+                                    .repositories(ArtifactSupport.remoteRepositories(session, project))
+                                    .build())
+                            .getProject()
+                            .orElse(null);
 
-                    url = getJavadocLink(artifactProject);
+                    url = artifactProject == null ? null : getJavadocLink(artifactProject);
                     detected = true;
-                } catch (ProjectBuildingException e) {
-                    logError("ProjectBuildingException for " + artifact + ": " + e.getMessage(), e);
+                } catch (MavenException e) {
+                    logError("Unable to build the project of " + artifact + ": " + e.getMessage(), e);
                     continue;
                 }
             }
 
             if (url != null && isValidJavadocLink(url, detected)) {
-                getLog().debug("Added Javadoc link: " + url + " for " + artifact.getId());
+                getLog().debug("Added Javadoc link: " + url + " for " + artifact.key());
 
                 dependenciesLinks.add(url);
             }
@@ -5480,7 +5613,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         return dependenciesLinks;
     }
 
-    private boolean matches(DependencyLink d, Artifact artifact) {
+    private boolean matches(DependencyLink d, Dependency artifact) {
         if (d.getGroupId() != null && !d.getGroupId().equals(artifact.getGroupId())) {
             return false;
         }
@@ -5611,8 +5744,8 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         Set<String> redirectLinks = new LinkedHashSet<>(links.size());
         for (String link : links) {
             try {
-                redirectLinks.add(
-                        JavadocUtil.getRedirectUrl(new URL(link), settings).toString());
+                redirectLinks.add(JavadocUtil.getRedirectUrl(new URL(link), session.getSettings())
+                        .toString());
             } catch (MalformedURLException | IllegalArgumentException e) {
                 // only print in debug, it should have been logged already in warn/error because link isn't valid
                 getLog().debug("Could not follow " + link + ". Reason: " + e.getMessage());
@@ -5667,14 +5800,14 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
             }
 
             try {
-                if (JavadocUtil.isValidElementList(elementListUri.toURL(), settings, validateLinks)) {
+                if (JavadocUtil.isValidElementList(elementListUri.toURL(), session.getSettings(), validateLinks)) {
                     return true;
                 }
             } catch (IOException e) {
                 // ignore this because it is optional
             }
 
-            if (JavadocUtil.isValidPackageList(packageListUri.toURL(), settings, validateLinks)) {
+            if (JavadocUtil.isValidPackageList(packageListUri.toURL(), session.getSettings(), validateLinks)) {
                 return true;
             }
 
@@ -5758,12 +5891,12 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @return the javadoc link based on the project URL i.e. <code>${project.url}/apidocs</code>.
      * @since 2.6
      */
-    private static String getJavadocLink(MavenProject project) {
-        if (project.getUrl() == null) {
+    private static String getJavadocLink(Project project) {
+        if (project.getModel().getUrl() == null) {
             return null;
         }
 
-        String url = cleanUrl(project.getUrl());
+        String url = cleanUrl(project.getModel().getUrl());
 
         return url + "/apidocs";
     }
@@ -5794,17 +5927,15 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      *         <code>${project.build.pluginManagement}</code>, or <code>null</code> if not defined
      * @since 2.6
      */
-    private static Plugin getPlugin(MavenProject project, String pluginId) {
-        if ((project.getBuild() == null) || (project.getBuild().getPluginsAsMap() == null)) {
+    private static Plugin getPlugin(Project project, String pluginId) {
+        if (project.getBuild() == null) {
             return null;
         }
 
-        Plugin plugin = project.getBuild().getPluginsAsMap().get(pluginId);
+        Plugin plugin = findPlugin(project.getBuild().getPlugins(), pluginId);
 
-        if ((plugin == null)
-                && (project.getBuild().getPluginManagement() != null)
-                && (project.getBuild().getPluginManagement().getPluginsAsMap() != null)) {
-            plugin = project.getBuild().getPluginManagement().getPluginsAsMap().get(pluginId);
+        if ((plugin == null) && (project.getBuild().getPluginManagement() != null)) {
+            plugin = findPlugin(project.getBuild().getPluginManagement().getPlugins(), pluginId);
         }
 
         return plugin;
@@ -5818,14 +5949,23 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      *         or <code>null</code> if not found.
      * @since 2.6
      */
-    private static String getPluginParameter(MavenProject project, String pluginId, String param) {
+    private static Plugin findPlugin(List<Plugin> plugins, String pluginId) {
+        for (Plugin plugin : plugins) {
+            if (pluginId.equals(plugin.getGroupId() + ':' + plugin.getArtifactId())) {
+                return plugin;
+            }
+        }
+        return null;
+    }
+
+    private static String getPluginParameter(Project project, String pluginId, String param) {
         Plugin plugin = getPlugin(project, pluginId);
         if (plugin != null) {
-            Xpp3Dom xpp3Dom = (Xpp3Dom) plugin.getConfiguration();
-            if (xpp3Dom != null
-                    && xpp3Dom.getChild(param) != null
-                    && StringUtils.isNotEmpty(xpp3Dom.getChild(param).getValue())) {
-                return xpp3Dom.getChild(param).getValue();
+            XmlNode xmlNode = plugin.getConfiguration();
+            if (xmlNode != null
+                    && xmlNode.child(param) != null
+                    && StringUtils.isNotEmpty(xmlNode.child(param).value())) {
+                return xmlNode.child(param).value();
             }
         }
 
@@ -5882,7 +6022,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         options.setTags(toList(tags));
 
         if (getProject() != null && getJavadocDirectory() != null) {
-            Path basedir = getProject().getBasedir().toPath();
+            Path basedir = getProject().getBasedir();
             Path javadocDirectory = getJavadocDirectory().toPath().toAbsolutePath();
             Path javadocResourcesDirectory = basedir.relativize(javadocDirectory);
             options.setJavadocResourcesDirectory(javadocResourcesDirectory.toString());
@@ -5921,21 +6061,21 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
         }
     }
 
-    protected List<MavenProject> getReactorProjects() {
+    protected List<Project> getReactorProjects() {
         return reactorProjects;
     }
 
     /**
      * @param prefix the prefix of the exception
      * @param e the exception
-     * @throws MojoExecutionException {@link MojoExecutionException} issue while generating report
+     * @throws MojoException {@link MojoException} issue while generating report
      */
-    protected void failOnError(String prefix, Exception e) throws MojoExecutionException {
+    protected void failOnError(String prefix, Exception e) throws MojoException {
         if (failOnError) {
             if (e instanceof RuntimeException) {
                 throw (RuntimeException) e;
             }
-            throw new MojoExecutionException(prefix + ": " + e.getMessage(), e);
+            throw new MojoException(prefix + ": " + e.getMessage(), e);
         }
 
         getLog().error(prefix + ": " + e.getMessage(), e);
@@ -5944,16 +6084,16 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
     /**
      * @return list of projects to be part of aggregated javadoc
      */
-    private List<MavenProject> getAggregatedProjects() {
+    private List<Project> getAggregatedProjects() {
         if (this.reactorProjects == null) {
             return Collections.emptyList();
         }
-        Map<Path, MavenProject> reactorProjectsMap = new HashMap<>();
-        for (MavenProject reactorProject : this.reactorProjects) {
+        Map<Path, Project> reactorProjectsMap = new HashMap<>();
+        for (Project reactorProject : this.reactorProjects) {
             if (!isSkippedJavadoc(reactorProject)
                     && //
                     !isSkippedModule(reactorProject)) {
-                reactorProjectsMap.put(reactorProject.getBasedir().toPath(), reactorProject);
+                reactorProjectsMap.put(reactorProject.getBasedir(), reactorProject);
             }
         }
 
@@ -5964,7 +6104,7 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @param mavenProject the project that might be skipped
      * @return <code>true</code> if the project needs to be skipped from aggregate generation
      */
-    protected boolean isSkippedModule(MavenProject mavenProject) {
+    protected boolean isSkippedModule(Project mavenProject) {
         if (this.skippedModules == null || this.skippedModules.isEmpty()) {
             return false;
         }
@@ -5988,24 +6128,24 @@ public abstract class AbstractJavadocMojo extends AbstractMojo {
      * @param mavenProject the project that might be skipped
      * @return <code>true</code> if the pom configuration skips javadoc generation for the project
      */
-    protected boolean isSkippedJavadoc(MavenProject mavenProject) {
-        String property = mavenProject.getProperties().getProperty("maven.javadoc.skip");
+    protected boolean isSkippedJavadoc(Project mavenProject) {
+        String property = mavenProject.getModel().getProperties().get("maven.javadoc.skip");
         if (property != null) {
             boolean skip = BooleanUtils.toBoolean(property);
-            getLog().debug("isSkippedJavadoc " + mavenProject + " " + skip);
+            getLog().debug("isSkippedJavadoc " + mavenProject.getId() + " " + skip);
             return skip;
         }
         final String pluginId = "org.apache.maven.plugins:maven-javadoc-plugin";
         property = getPluginParameter(mavenProject, pluginId, "skip");
         if (property != null) {
             boolean skip = BooleanUtils.toBoolean(property);
-            getLog().debug("isSkippedJavadoc " + mavenProject + " " + skip);
+            getLog().debug("isSkippedJavadoc " + mavenProject.getId() + " " + skip);
             return skip;
         }
-        if (mavenProject.getParent() != null) {
-            return isSkippedJavadoc(mavenProject.getParent());
+        if (mavenProject.getParent().isPresent()) {
+            return isSkippedJavadoc(mavenProject.getParent().get());
         }
-        getLog().debug("isSkippedJavadoc " + mavenProject + " " + false);
+        getLog().debug("isSkippedJavadoc " + mavenProject.getId() + " " + false);
         return false;
     }
 
