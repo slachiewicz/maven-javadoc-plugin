@@ -18,21 +18,8 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.plugins.annotations.Execute;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
-import org.apache.maven.project.MavenProjectHelper;
-import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.toolchain.ToolchainManager;
-import org.codehaus.plexus.archiver.jar.JarArchiver;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
-import org.eclipse.aether.RepositorySystem;
+import org.apache.maven.api.plugin.annotations.Execute;
+import org.apache.maven.api.plugin.annotations.Mojo;
 
 /**
  * <p>Bundles the Javadoc documentation for main <code>Java code</code> in an <b>aggregator</b> project into a jar
@@ -43,38 +30,9 @@ import org.eclipse.aether.RepositorySystem;
  *
  * @since 2.6
  */
-@Mojo(
-        name = "aggregate-jar",
-        defaultPhase = LifecyclePhase.PACKAGE,
-        aggregator = true,
-        requiresDependencyResolution = ResolutionScope.COMPILE)
-@Execute(phase = LifecyclePhase.COMPILE)
+@Mojo(name = "aggregate-jar", defaultPhase = "package", aggregator = true)
+@Execute(phase = "compile")
 public class AggregatorJavadocJarMojo extends JavadocJarMojo {
-
-    // CHECKSTYLE_OFF: ParameterNumber
-    @Inject
-    public AggregatorJavadocJarMojo(
-            MavenProjectHelper projectHelper,
-            JarArchiver jarArchiver,
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        super(
-                projectHelper,
-                jarArchiver,
-                siteTool,
-                archiverManager,
-                resourceResolver,
-                repoSystem,
-                artifactHandlerManager,
-                mavenProjectBuilder,
-                toolchainManager);
-    }
-    // CHECKSTYLE_ON: ParameterNumber
 
     @Override
     protected boolean isAggregator() {

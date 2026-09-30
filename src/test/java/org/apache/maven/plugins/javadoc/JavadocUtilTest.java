@@ -46,10 +46,10 @@ import java.util.Set;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
-import org.apache.maven.plugin.testing.stubs.MavenProjectStub;
+import org.apache.maven.api.settings.Proxy;
+import org.apache.maven.api.settings.Settings;
 import org.apache.maven.plugins.javadoc.ProxyServer.AuthAsyncProxyServlet;
-import org.apache.maven.settings.Proxy;
-import org.apache.maven.settings.Settings;
+import org.apache.maven.testing.plugin.stubs.ProjectStub;
 import org.codehaus.plexus.util.FileUtils;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
@@ -63,7 +63,7 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
 import org.junit.jupiter.api.io.TempDir;
 
-import static org.apache.maven.api.plugin.testing.MojoExtension.getBasedir;
+import static org.apache.maven.testing.plugin.MojoExtension.getBasedir;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -307,7 +307,6 @@ class JavadocUtilTest {
     @Test
     void testIsValidPackageList() throws Exception {
         Settings settings = null;
-        Proxy proxy;
 
         URL url = null;
         URL wrongUrl;
@@ -348,7 +347,7 @@ class JavadocUtilTest {
         AuthAsyncProxyServlet proxyServlet = new AuthAsyncProxyServlet();
         try (ProxyServer proxyServer = new ProxyServer(proxyServlet)) {
             proxyServer.start();
-            settings = new Settings();
+            settings = Settings.newInstance();
             assertTrue(JavadocUtil.isValidPackageList(url, settings, true));
             try {
                 JavadocUtil.isValidPackageList(wrongUrl, settings, false);
@@ -365,13 +364,14 @@ class JavadocUtilTest {
         try (ProxyServer proxyServer = new ProxyServer(proxyServlet)) {
             proxyServer.start();
 
-            settings = new Settings();
-            proxy = new Proxy();
-            proxy.setActive(true);
-            proxy.setHost(proxyServer.getHostName());
-            proxy.setPort(proxyServer.getPort());
-            proxy.setProtocol("http");
-            settings.addProxy(proxy);
+            settings = Settings.newBuilder()
+                    .proxies(List.of(Proxy.newBuilder()
+                            .activeString("true")
+                            .host(proxyServer.getHostName())
+                            .portString(String.valueOf(proxyServer.getPort()))
+                            .protocol("http")
+                            .build()))
+                    .build();
 
             JavadocUtil.isValidPackageList(url, settings, false);
             fail();
@@ -384,15 +384,16 @@ class JavadocUtilTest {
         try (ProxyServer proxyServer = new ProxyServer(proxyServlet)) {
             proxyServer.start();
 
-            settings = new Settings();
-            proxy = new Proxy();
-            proxy.setActive(true);
-            proxy.setHost(proxyServer.getHostName());
-            proxy.setPort(proxyServer.getPort());
-            proxy.setProtocol("http");
-            proxy.setUsername("foo");
-            proxy.setPassword("bar");
-            settings.addProxy(proxy);
+            settings = Settings.newBuilder()
+                    .proxies(List.of(Proxy.newBuilder()
+                            .activeString("true")
+                            .host(proxyServer.getHostName())
+                            .portString(String.valueOf(proxyServer.getPort()))
+                            .protocol("http")
+                            .username("foo")
+                            .password("bar")
+                            .build()))
+                    .build();
 
             assertTrue(JavadocUtil.isValidPackageList(url, settings, true));
 
@@ -409,15 +410,16 @@ class JavadocUtilTest {
         try (ProxyServer proxyServer = new ProxyServer(proxyServlet)) {
             proxyServer.start();
 
-            settings = new Settings();
-            proxy = new Proxy();
-            proxy.setActive(true);
-            proxy.setHost(proxyServer.getHostName());
-            proxy.setPort(proxyServer.getPort());
-            proxy.setProtocol("http");
-            proxy.setUsername("foo");
-            proxy.setPassword("bar");
-            settings.addProxy(proxy);
+            settings = Settings.newBuilder()
+                    .proxies(List.of(Proxy.newBuilder()
+                            .activeString("true")
+                            .host(proxyServer.getHostName())
+                            .portString(String.valueOf(proxyServer.getPort()))
+                            .protocol("http")
+                            .username("foo")
+                            .password("bar")
+                            .build()))
+                    .build();
 
             JavadocUtil.isValidPackageList(url, settings, true);
             fail();
@@ -430,16 +432,17 @@ class JavadocUtilTest {
         try (ProxyServer proxyServer = new ProxyServer(proxyServlet)) {
             proxyServer.start();
 
-            settings = new Settings();
-            proxy = new Proxy();
-            proxy.setActive(true);
-            proxy.setHost(proxyServer.getHostName());
-            proxy.setPort(proxyServer.getPort());
-            proxy.setProtocol("http");
-            proxy.setUsername("foo");
-            proxy.setPassword("bar");
-            proxy.setNonProxyHosts("maven.apache.org");
-            settings.addProxy(proxy);
+            settings = Settings.newBuilder()
+                    .proxies(List.of(Proxy.newBuilder()
+                            .activeString("true")
+                            .host(proxyServer.getHostName())
+                            .portString(String.valueOf(proxyServer.getPort()))
+                            .protocol("http")
+                            .username("foo")
+                            .password("bar")
+                            .nonProxyHosts("maven.apache.org")
+                            .build()))
+                    .build();
 
             assertTrue(JavadocUtil.isValidPackageList(url, settings, true));
         }
@@ -449,11 +452,13 @@ class JavadocUtilTest {
     void testGetRedirectUrlNotHttp() throws Exception {
         URL url = new URI("ftp://some.where").toURL();
         assertEquals(
-                url.toString(), JavadocUtil.getRedirectUrl(url, new Settings()).toString());
+                url.toString(),
+                JavadocUtil.getRedirectUrl(url, Settings.newInstance()).toString());
 
         url = new URI("file://some/where").toURL();
         assertEquals(
-                url.toString(), JavadocUtil.getRedirectUrl(url, new Settings()).toString());
+                url.toString(),
+                JavadocUtil.getRedirectUrl(url, Settings.newInstance()).toString());
     }
 
     /**
@@ -492,7 +497,7 @@ class JavadocUtilTest {
             URL url = new URI("http://localhost:"
                             + ((ServerConnector) redirectServer.getConnectors()[0]).getLocalPort())
                     .toURL();
-            URL redirectUrl = JavadocUtil.getRedirectUrl(url, new Settings());
+            URL redirectUrl = JavadocUtil.getRedirectUrl(url, Settings.newInstance());
 
             assertTrue(redirectUrl.toString().startsWith("http://localhost:" + redirectPort));
         } finally {
@@ -529,7 +534,7 @@ class JavadocUtilTest {
 
             URL url =
                     new URI("http://localhost:" + ((ServerConnector) server.getConnectors()[0]).getLocalPort()).toURL();
-            URL redirectUrl = JavadocUtil.getRedirectUrl(url, new Settings());
+            URL redirectUrl = JavadocUtil.getRedirectUrl(url, Settings.newInstance());
 
             assertEquals(url.toURI(), redirectUrl.toURI());
         } finally {
@@ -564,7 +569,7 @@ class JavadocUtilTest {
 
             URL url =
                     new URI("http://localhost:" + ((ServerConnector) server.getConnectors()[0]).getLocalPort()).toURL();
-            JavadocUtil.getRedirectUrl(url, new Settings());
+            JavadocUtil.getRedirectUrl(url, Settings.newInstance());
         } finally {
             stopSilently(server);
         }
@@ -637,8 +642,7 @@ class JavadocUtilTest {
 
         Set<Path> expected = Collections.singleton(Paths.get(classesDir));
 
-        MavenProjectStub project = new MavenProjectStub();
-        project.setFile(new File(getBasedir(), "pom.xml"));
+        ProjectStub project = new ProjectStub().setBasedir(Paths.get(getBasedir()));
 
         assertEquals(expected, JavadocUtil.pruneDirs(project, list));
     }
@@ -663,8 +667,7 @@ class JavadocUtilTest {
         Set<Path> expectedNoJar = Collections.singleton(Paths.get(classesDir));
         Set<Path> expectedWithJar = new HashSet<>(Arrays.asList(Paths.get(classesDir), Paths.get(tagletJar)));
 
-        MavenProjectStub project = new MavenProjectStub();
-        project.setFile(new File(getBasedir(), "pom.xml"));
+        ProjectStub project = new ProjectStub().setBasedir(Paths.get(getBasedir()));
 
         assertEquals(expectedNoJar, JavadocUtil.prunePaths(project, list, false));
         assertEquals(expectedWithJar, JavadocUtil.prunePaths(project, list, true));
@@ -677,8 +680,7 @@ class JavadocUtilTest {
         // javadoc options file. The javadoc tool runs from target/reports/testapidocs, so the
         // relative path resolved to the wrong location, causing the wrong class to be loaded
         // and triggering: AssertionError: ignored flag: -Xlint:-options on Java 25.
-        MavenProjectStub project = new MavenProjectStub();
-        project.setFile(new File(getBasedir(), "pom.xml"));
+        ProjectStub project = new ProjectStub().setBasedir(Paths.get(getBasedir()));
 
         Collection<Path> result = JavadocUtil.prunePaths(project, Collections.singletonList("target/classes"), false);
 

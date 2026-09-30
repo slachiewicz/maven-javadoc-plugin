@@ -19,17 +19,19 @@
 package org.apache.maven.plugins.javadoc;
 
 import java.io.File;
-import java.util.Collections;
+import java.nio.file.Paths;
 
-import org.apache.maven.api.plugin.testing.Basedir;
-import org.apache.maven.api.plugin.testing.InjectMojo;
-import org.apache.maven.api.plugin.testing.MojoTest;
-import org.apache.maven.artifact.Artifact;
-import org.apache.maven.artifact.DefaultArtifact;
-import org.apache.maven.artifact.handler.DefaultArtifactHandler;
+import org.apache.maven.api.DependencyScope;
+import org.apache.maven.api.PathScope;
+import org.apache.maven.api.di.Provides;
+import org.apache.maven.api.di.Singleton;
+import org.apache.maven.impl.InternalSession;
+import org.apache.maven.testing.plugin.Basedir;
+import org.apache.maven.testing.plugin.InjectMojo;
+import org.apache.maven.testing.plugin.MojoTest;
 import org.junit.jupiter.api.Test;
 
-import static org.apache.maven.api.plugin.testing.MojoExtension.getBasedir;
+import static org.apache.maven.testing.plugin.MojoExtension.getBasedir;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -37,6 +39,26 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @MojoTest
 public class TestJavadocReportTest {
+    @Provides
+    @Singleton
+    InternalSession createSession() {
+        InternalSession session = TestSessions.create();
+        TestSessions.addDependency(
+                session,
+                PathScope.TEST_COMPILE,
+                DependencyScope.TEST,
+                "artifactId",
+                Paths.get("test/test-dependency-1.2.3.jar"));
+        // Maven 3 also put the runtime scope on the class path of the test goals, which TEST_COMPILE lacks
+        TestSessions.addDependency(
+                session,
+                PathScope.TEST_RUNTIME,
+                DependencyScope.RUNTIME,
+                "runtime",
+                Paths.get("test/runtime-dependency-1.0.jar"));
+        return session;
+    }
+
     /**
      * Test the test-javadoc configuration for the plugin
      *
@@ -44,15 +66,8 @@ public class TestJavadocReportTest {
      */
     @Test
     @InjectMojo(goal = "test-javadoc", pom = "test-javadoc-test-plugin-config.xml")
-    @Basedir("/unit/test-javadoc-test")
+    @Basedir("${basedir}/target/test-classes/unit/test-javadoc-test")
     public void testTestJavadoc(TestJavadocReport mojo) throws Exception {
-
-        Artifact testArtifact = new DefaultArtifact(
-                "groupId", "artifactId", "1.2.3", "test", "jar", null, new DefaultArtifactHandler("jar"));
-        testArtifact.setFile(new File("test/test-dependency-1.2.3.jar"));
-
-        mojo.getProject().setArtifacts(Collections.singleton(testArtifact));
-
         mojo.execute();
 
         File generatedFile = new File(getBasedir(), "/target/site/testapidocs/maven/AppTest.html");
@@ -62,6 +77,6 @@ public class TestJavadocReportTest {
         // '/Users/slawomir.jaranowski/repos/apache/maven-javadoc-plugin/target/test/unit/test-javadoc-test/target/classes:/Users/slawomir.jaranowski/repos/apache/maven-javadoc-plugin/target/test/unit/test-javadoc-test/target/test-classes:/Users/slawomir.jaranowski/repos/apache/maven-javadoc-plugin/src/test/resources/unit/test-javadoc-test/junit/junit/3.8.1/junit-3.8.1.jar'
 
         File options = new File(getBasedir(), "/target/site/testapidocs/options");
-        assertThat(options).content().contains("test-dependency-1.2.3.jar");
+        assertThat(options).content().contains("test-dependency-1.2.3.jar").contains("runtime-dependency-1.0.jar");
     }
 }

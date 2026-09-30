@@ -18,29 +18,17 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
-import org.apache.maven.project.MavenProjectHelper;
-import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.toolchain.ToolchainManager;
+import org.apache.maven.api.ProducedArtifact;
+import org.apache.maven.api.plugin.MojoException;
+import org.apache.maven.api.plugin.annotations.Mojo;
+import org.apache.maven.api.plugin.annotations.Parameter;
 import org.codehaus.plexus.archiver.Archiver;
 import org.codehaus.plexus.archiver.ArchiverException;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
-import org.codehaus.plexus.archiver.manager.NoSuchArchiverException;
+import org.codehaus.plexus.archiver.jar.JarArchiver;
 import org.codehaus.plexus.archiver.util.DefaultFileSet;
-import org.eclipse.aether.RepositorySystem;
 
 /**
  * Bundle {@link AbstractJavadocMojo#javadocDirectory}, along with javadoc configuration options such
@@ -50,11 +38,7 @@ import org.eclipse.aether.RepositorySystem;
  *
  * @since 2.7
  */
-@Mojo(
-        name = "resource-bundle",
-        defaultPhase = LifecyclePhase.PACKAGE,
-        requiresDependencyResolution = ResolutionScope.COMPILE,
-        threadSafe = true)
+@Mojo(name = "resource-bundle", defaultPhase = "package")
 public class ResourcesBundleMojo extends AbstractJavadocMojo {
 
     /**
@@ -79,36 +63,9 @@ public class ResourcesBundleMojo extends AbstractJavadocMojo {
      * Helper component to provide an easy mechanism for attaching an artifact to the project for
      * installation/deployment.
      */
-    private MavenProjectHelper projectHelper;
-
     /**
      * Archiver manager, used to manage jar builder.
      */
-    private ArchiverManager archiverManager;
-
-    // CHECKSTYLE_OFF: ParameterNumber
-    @Inject
-    public ResourcesBundleMojo(
-            MavenProjectHelper projectHelper,
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        super(
-                siteTool,
-                archiverManager,
-                resourceResolver,
-                repoSystem,
-                artifactHandlerManager,
-                mavenProjectBuilder,
-                toolchainManager);
-        this.archiverManager = archiverManager;
-        this.projectHelper = projectHelper;
-    }
-    // CHECKSTYLE_ON: ParameterNumber
 
     /**
      * Assemble a new {@link org.apache.maven.plugins.javadoc.options.JavadocOptions JavadocOptions} instance that
@@ -122,7 +79,7 @@ public class ResourcesBundleMojo extends AbstractJavadocMojo {
      * @see org.apache.maven.plugin.Mojo#execute()
      */
     @Override
-    protected void doExecute() throws MojoExecutionException, MojoFailureException {
+    protected void doExecute() throws MojoException {
         if (skip) {
             getLog().info("Skipping javadoc resource bundle generation");
             return;
@@ -131,15 +88,10 @@ public class ResourcesBundleMojo extends AbstractJavadocMojo {
         try {
             buildJavadocOptions();
         } catch (IOException e) {
-            throw new MojoExecutionException("Failed to generate javadoc-options file: " + e.getMessage(), e);
+            throw new MojoException("Failed to generate javadoc-options file: " + e.getMessage(), e);
         }
 
-        Archiver archiver;
-        try {
-            archiver = archiverManager.getArchiver("jar");
-        } catch (NoSuchArchiverException e) {
-            throw new MojoExecutionException("Failed to retrieve jar archiver component from manager.", e);
-        }
+        Archiver archiver = new JarArchiver();
 
         File optionsFile = getJavadocOptionsFile();
         File bundleFile =
@@ -156,10 +108,17 @@ public class ResourcesBundleMojo extends AbstractJavadocMojo {
             archiver.setDestFile(bundleFile);
             archiver.createArchive();
         } catch (ArchiverException | IOException e) {
-            throw new MojoExecutionException(
+            throw new MojoException(
                     "Failed to assemble javadoc-resources bundle archive. Reason: " + e.getMessage(), e);
         }
 
-        projectHelper.attachArtifact(getProject(), bundleFile, getAttachmentClassifier());
+        ProducedArtifact artifact = session.createProducedArtifact(
+                getProject().getGroupId(),
+                getProject().getArtifactId(),
+                getProject().getVersion(),
+                getAttachmentClassifier(),
+                null,
+                "jar");
+        getProjectManager().attachArtifact(getProject(), artifact, bundleFile.toPath());
     }
 }

@@ -18,8 +18,6 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
 import java.io.File;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -27,23 +25,23 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import org.apache.maven.api.plugin.testing.Basedir;
-import org.apache.maven.api.plugin.testing.InjectMojo;
-import org.apache.maven.api.plugin.testing.MojoTest;
-import org.apache.maven.artifact.DefaultArtifact;
-import org.apache.maven.artifact.handler.DefaultArtifactHandler;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
+import org.apache.maven.api.di.Provides;
+import org.apache.maven.api.di.Singleton;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.impl.InternalSession;
+import org.apache.maven.testing.plugin.Basedir;
+import org.apache.maven.testing.plugin.InjectMojo;
+import org.apache.maven.testing.plugin.MojoTest;
 import org.codehaus.plexus.languages.java.version.JavaVersion;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.commons.io.FileUtils.deleteDirectory;
-import static org.apache.maven.api.plugin.testing.MojoExtension.getBasedir;
+import static org.apache.maven.testing.plugin.MojoExtension.getBasedir;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -52,21 +50,19 @@ import static org.mockito.Mockito.verify;
 @MojoTest
 class JavadocJarMojoTest {
 
-    @Inject
-    private MavenProject project;
+    private final Log log = mock(Log.class);
 
-    @Inject
-    private Log log;
-
-    @BeforeEach
-    void setup() {
-        DefaultArtifactHandler artifactHandler = new DefaultArtifactHandler("jar");
-        artifactHandler.setLanguage("java");
-
-        DefaultArtifact artifact =
-                new DefaultArtifact("GROUPID", "ARTIFACTID", "1.0-SNAPSHOT", "compile", "jar", null, artifactHandler);
-        project.setArtifact(artifact);
+    @Provides
+    @Singleton
+    InternalSession createSession() {
+        return TestSessions.create();
     }
+
+    @Provides
+    Log createLog() {
+        return log;
+    }
+
     /**
      * Test when default configuration is provided
      *
@@ -74,7 +70,7 @@ class JavadocJarMojoTest {
      */
     @Test
     @InjectMojo(goal = "jar", pom = "javadocjar-default-plugin-config.xml")
-    @Basedir("/unit/javadocjar-default")
+    @Basedir("${basedir}/target/test-classes/unit/javadocjar-default")
     void testDefaultConfig(JavadocJarMojo mojo) throws Exception {
         mojo.execute();
 
@@ -126,7 +122,7 @@ class JavadocJarMojoTest {
 
     @Test
     @InjectMojo(goal = "jar", pom = "javadocjar-failonerror-plugin-config.xml")
-    @Basedir("/unit/javadocjar-failonerror")
+    @Basedir("${basedir}/target/test-classes/unit/javadocjar-failonerror")
     void testContinueIfFailOnErrorIsFalse(JavadocJarMojo mojo) throws Exception {
         mojo.execute();
 
@@ -137,11 +133,8 @@ class JavadocJarMojoTest {
 
     @Test
     @InjectMojo(goal = "jar", pom = "javadocjar-archive-config.xml")
-    @Basedir("/unit/javadocjar-archive-config")
+    @Basedir("${basedir}/target/test-classes/unit/javadocjar-archive-config")
     void testIncludeMavenDescriptorWhenExplicitlyConfigured(JavadocJarMojo mojo) throws Exception {
-
-        project.setGroupId("org.apache.maven.plugins.maven-javadoc-plugin.unit");
-        project.setArtifactId("javadocjar-archive-config");
 
         mojo.execute();
 
@@ -170,7 +163,7 @@ class JavadocJarMojoTest {
 
     @Test
     @InjectMojo(goal = "jar", pom = "stale-test-plugin-config.xml")
-    @Basedir("/unit/stale-test")
+    @Basedir("${basedir}/target/test-classes/unit/stale-test")
     void testStale(JavadocJarMojo mojo) throws Exception {
 
         new File(getBasedir(), "/target/maven-javadoc-plugin-stale-data.txt").delete();

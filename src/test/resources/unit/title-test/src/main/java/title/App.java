@@ -16,31 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.maven.plugins.javadoc.stubs;
-
-import org.apache.maven.artifact.handler.DefaultArtifactHandler;
+package title;
 
 /**
- * @author <a href="mailto:oching@apache.org">Maria Odea Ching</a>
+ * Application.
  */
-public class DefaultArtifactHandlerStub extends DefaultArtifactHandler {
-    private String language;
-
-    /** {@inheritDoc} */
-    @Override
-    public String getLanguage() {
-        if (language == null) {
-            language = "java";
-        }
-
-        return language;
-    }
-
-    /**
-     * @param language
-     */
-    @Override
-    public void setLanguage(String language) {
-        this.language = language;
-    }
+public class App {
+    /** Does nothing. */
+    public void run() {}
 }

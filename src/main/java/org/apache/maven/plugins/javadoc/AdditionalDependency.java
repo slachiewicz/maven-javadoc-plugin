@@ -18,12 +18,77 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import org.apache.maven.model.Dependency;
-
 /**
- * Provides syntactic sugar for using the standard {@code Dependency}
- * model as a parameter to {@link AbstractJavadocMojo}'s {@code additionalDependencies}.
+ * A dependency coordinate given as a parameter to {@link AbstractJavadocMojo}'s {@code additionalDependencies}.
+ * <p>
+ * This was a subclass of the Maven 3 {@code org.apache.maven.model.Dependency}. The Maven 4 model classes are
+ * immutable and cannot be populated from plugin configuration, so this is a plain bean with the fields that are
+ * relevant for resolving an artifact.
+ * </p>
  */
-public class AdditionalDependency extends Dependency {
-    // no op
+public class AdditionalDependency {
+    private String groupId;
+
+    private String artifactId;
+
+    private String version;
+
+    private String type = "jar";
+
+    private String classifier;
+
+    private String scope;
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
+    }
+
+    public String getArtifactId() {
+        return artifactId;
+    }
+
+    public void setArtifactId(String artifactId) {
+        this.artifactId = artifactId;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getClassifier() {
+        return classifier;
+    }
+
+    public void setClassifier(String classifier) {
+        this.classifier = classifier;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+
+    @Override
+    public String toString() {
+        return groupId + ":" + artifactId + ":" + type + (classifier == null ? "" : ":" + classifier) + ":" + version;
+    }
 }

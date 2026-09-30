@@ -18,34 +18,23 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
-import org.apache.maven.archiver.MavenArchiveConfiguration;
-import org.apache.maven.archiver.MavenArchiver;
-import org.apache.maven.artifact.DependencyResolutionRequiredException;
-import org.apache.maven.artifact.handler.ArtifactHandler;
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.model.Resource;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
-import org.apache.maven.project.MavenProjectHelper;
-import org.apache.maven.project.ProjectBuilder;
+import org.apache.maven.api.Language;
+import org.apache.maven.api.ProducedArtifact;
+import org.apache.maven.api.ProjectScope;
+import org.apache.maven.api.plugin.MojoException;
+import org.apache.maven.api.plugin.annotations.Mojo;
+import org.apache.maven.api.plugin.annotations.Parameter;
 import org.apache.maven.reporting.MavenReportException;
-import org.apache.maven.toolchain.ToolchainManager;
+import org.apache.maven.shared.archiver.MavenArchiveConfiguration;
+import org.apache.maven.shared.archiver.MavenArchiver;
+import org.apache.maven.shared.archiver.MavenArchiverException;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.jar.JarArchiver;
-import org.codehaus.plexus.archiver.jar.ManifestException;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
-import org.eclipse.aether.RepositorySystem;
 
 /**
  * Bundles the Javadoc documentation for <code>main Java code</code> in an <b>NON aggregator</b> project into
@@ -54,11 +43,7 @@ import org.eclipse.aether.RepositorySystem;
  *
  * @since 2.0
  */
-@Mojo(
-        name = "jar",
-        defaultPhase = LifecyclePhase.PACKAGE,
-        requiresDependencyResolution = ResolutionScope.COMPILE,
-        threadSafe = true)
+@Mojo(name = "jar", defaultPhase = "package")
 public class JavadocJarMojo extends AbstractJavadocMojo {
     /**
      * Includes all generated Javadoc files
@@ -79,61 +64,20 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
     };
 
     // ----------------------------------------------------------------------
-    // Mojo components
-    // ----------------------------------------------------------------------
-
-    /**
-     * Used for attaching the artifact in the project.
-     */
-    private MavenProjectHelper projectHelper;
-
-    /**
-     * The Jar archiver.
-     *
-     * @since 2.5
-     */
-    private JarArchiver jarArchiver;
-
-    // CHECKSTYLE_OFF: ParameterNumber
-    @Inject
-    public JavadocJarMojo(
-            MavenProjectHelper projectHelper,
-            JarArchiver jarArchiver,
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        super(
-                siteTool,
-                archiverManager,
-                resourceResolver,
-                repoSystem,
-                artifactHandlerManager,
-                mavenProjectBuilder,
-                toolchainManager);
-        this.projectHelper = projectHelper;
-        this.jarArchiver = jarArchiver;
-    }
-    // CHECKSTYLE_ON: ParameterNumber
-
-    // ----------------------------------------------------------------------
     // Mojo Parameters
     // ----------------------------------------------------------------------
 
     /**
      * Specifies the directory where the generated jar file will be put.
      */
-    @Parameter(property = "project.build.directory")
+    @Parameter(defaultValue = "${project.build.directory}")
     private String jarOutputDirectory;
 
     /**
      * Specifies the filename that will be used for the generated jar file. Please note that <code>-javadoc</code>
      * or <code>-test-javadoc</code> will be appended to the file name.
      */
-    @Parameter(property = "project.build.finalName")
+    @Parameter(defaultValue = "${project.build.finalName}")
     private String finalName;
 
     /**
@@ -159,7 +103,7 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
      * @since 2.5
      */
     @Parameter(defaultValue = "${project.build.outputDirectory}/META-INF/MANIFEST.MF", required = true, readonly = true)
-    private File defaultManifestFile;
+    private Path defaultManifestFile;
 
     /**
      * Set this to <code>true</code> to enable the use of the <code>defaultManifestFile</code>.
@@ -197,22 +141,21 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
 
     /** {@inheritDoc} */
     @Override
-    protected void doExecute() throws MojoExecutionException {
+    protected void doExecute() throws MojoException {
         if (skip) {
             getLog().info("Skipping javadoc generation");
             return;
         }
 
-        if (!isAggregator() || !"pom".equalsIgnoreCase(project.getPackaging())) {
-            ArtifactHandler artifactHandler = project.getArtifact().getArtifactHandler();
-            if (!"java".equals(artifactHandler.getLanguage())) {
+        if (!isAggregator() || !isPomPackaging(project)) {
+            if (!isJavaProject(project)) {
                 getLog().info("Not executing Javadoc as the project is not a Java classpath-capable package");
                 return;
             }
         }
 
         try {
-            executeReport(SiteTool.DEFAULT_LOCALE);
+            executeReport(DEFAULT_LOCALE);
         } catch (MavenReportException e) {
             failOnError("MavenReportException: Error while generating Javadoc", e);
         } catch (RuntimeException e) {
@@ -230,7 +173,14 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
                     // TODO: these introduced dependencies on the project are going to become problematic - can we
                     // export it
                     //  through metadata instead?
-                    projectHelper.attachArtifact(project, "javadoc", getClassifier(), outputFile);
+                    ProducedArtifact artifact = session.createProducedArtifact(
+                            project.getGroupId(),
+                            project.getArtifactId(),
+                            project.getVersion(),
+                            getClassifier(),
+                            null,
+                            "javadoc");
+                    getProjectManager().attachArtifact(project, artifact, outputFile.toPath());
                 }
             } catch (ArchiverException e) {
                 failOnError("ArchiverException: Error while creating archive", e);
@@ -270,7 +220,7 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
      */
     private File generateArchive(File javadocFiles, String jarFileName) throws ArchiverException, IOException {
         MavenArchiver archiver = new MavenArchiver();
-        archiver.setArchiver(jarArchiver);
+        archiver.setArchiver(new JarArchiver());
         archiver.setCreatedBy("Maven Javadoc Plugin", "org.apache.maven.plugins", "maven-javadoc-plugin");
 
         // configure for Reproducible Builds based on outputTimestamp value
@@ -280,16 +230,14 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
             archiver.getArchiver().addDirectory(javadocFiles, DEFAULT_INCLUDES, DEFAULT_EXCLUDES);
         }
 
-        List<Resource> resources = project.getBuild().getResources();
+        getProjectManager()
+                .getEnabledSourceRoots(project, ProjectScope.MAIN, Language.RESOURCES)
+                .map(root -> project.getBasedir().resolve(root.directory()))
+                .filter(directory -> directory.endsWith("maven-shared-archive-resources"))
+                .forEach(directory -> archiver.getArchiver().addDirectory(directory.toFile()));
 
-        for (Resource r : resources) {
-            if (r.getDirectory().endsWith("maven-shared-archive-resources")) {
-                archiver.getArchiver().addDirectory(new File(r.getDirectory()));
-            }
-        }
-
-        if (useDefaultManifestFile && defaultManifestFile.exists() && archive.getManifestFile() == null) {
-            getLog().debug("Adding existing MANIFEST to archive. Found under: " + defaultManifestFile.getPath());
+        if (useDefaultManifestFile && Files.exists(defaultManifestFile) && archive.getManifestFile() == null) {
+            getLog().debug("Adding existing MANIFEST to archive. Found under: " + defaultManifestFile);
             archive.setManifestFile(defaultManifestFile);
         }
 
@@ -303,7 +251,7 @@ public class JavadocJarMojo extends AbstractJavadocMojo {
 
         try {
             archiver.createArchive(session, project, archive);
-        } catch (ManifestException | DependencyResolutionRequiredException e) {
+        } catch (MavenArchiverException e) {
             throw new ArchiverException("Error creating Javadoc archive: " + e.getMessage(), e);
         }
 

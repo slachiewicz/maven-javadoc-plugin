@@ -33,8 +33,8 @@ under the License.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <outputDirectory>${basedir}/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}//target/javadoc-bundle-options</javadocOptionsDir>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}//target/javadoc-bundle-options</javadocOptionsDir>
           <breakiterator>false</breakiterator>
           <old>false</old>
           <show>protected</show>
@@ -60,12 +60,18 @@ under the License.
           <use>true</use>
           <version>true</version>
           <windowtitle>Maven Javadoc Plugin Subpackages Test 1.0-SNAPSHOT API</windowtitle>
-          <sourcepath>${basedir}</sourcepath>
+          <sourcepath>${project.basedir}/</sourcepath>
           <sourceFileExcludes>
             <sourceFileExclude>**/Pariah*</sourceFileExclude>
           </sourceFileExcludes>
           <debug>true</debug>
           <failOnError>true</failOnError>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

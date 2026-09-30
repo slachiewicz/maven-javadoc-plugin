@@ -18,19 +18,7 @@
  */
 package org.apache.maven.plugins.javadoc;
 
-import javax.inject.Inject;
-
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.doxia.tools.SiteTool;
-import org.apache.maven.plugins.annotations.Execute;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.plugins.javadoc.resolver.ResourceResolver;
-import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.toolchain.ToolchainManager;
-import org.codehaus.plexus.archiver.manager.ArchiverManager;
-import org.eclipse.aether.RepositorySystem;
+import org.apache.maven.api.plugin.annotations.Mojo;
 
 /**
  * Generates documentation for the <code>Java code</code> in an <b>aggregator</b> project using the standard
@@ -38,29 +26,11 @@ import org.eclipse.aether.RepositorySystem;
  *
  * @since 3.1.0
  */
-@Mojo(name = "aggregate-no-fork", requiresDependencyResolution = ResolutionScope.COMPILE)
-@Execute(phase = LifecyclePhase.NONE)
-public class AggregatorJavadocNoForkReport extends AggregatorJavadocReport {
+@Mojo(name = "aggregate-no-fork")
+public class AggregatorJavadocNoForkReport extends JavadocNoForkReport {
 
-    // CHECKSTYLE_OFF: ParameterNumber
-    @Inject
-    public AggregatorJavadocNoForkReport(
-            SiteTool siteTool,
-            ArchiverManager archiverManager,
-            ResourceResolver resourceResolver,
-            RepositorySystem repoSystem,
-            ArtifactHandlerManager artifactHandlerManager,
-            ProjectBuilder mavenProjectBuilder,
-            ToolchainManager toolchainManager) {
-        super(
-                siteTool,
-                archiverManager,
-                resourceResolver,
-                repoSystem,
-                artifactHandlerManager,
-                mavenProjectBuilder,
-                toolchainManager);
+    @Override
+    protected boolean isAggregator() {
+        return true;
     }
-    // CHECKSTYLE_ON: ParameterNumber
-
 }

@@ -33,9 +33,9 @@ under the License.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <sourcepath>${basedir}</sourcepath>
-          <outputDirectory>${basedir}/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/target/javadoc-bundle-options</javadocOptionsDir>
+          <sourcepath>${project.basedir}/</sourcepath>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <breakiterator>false</breakiterator>
           <old>true</old>
           <show>private</show>
@@ -92,7 +92,7 @@ under the License.
           <offlineLinks>
             <OfflineLink>
               <url>http://java.sun.com/j2se/1.4.2/docs/api</url>
-              <location>${basedir}</location>
+              <location>${project.basedir}/</location>
             </OfflineLink>
           </offlineLinks>
           <header>MAVEN JAVADOC PLUGIN TEST</header>
@@ -102,6 +102,11 @@ under the License.
           <excludePackageNames>*.exclude2:custom.configuration.exclude1.*</excludePackageNames>
           <debug>true</debug>
           <failOnError>true</failOnError>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>

@@ -16,18 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.maven.plugins.javadoc.stubs;
+package system;
 
 /**
- * @author <a href="mailto:reto.weiss@axonivy.com">Reto Weiss</a>
+ * Application.
  */
-public class AggregateNotInSubDirectoryTestMavenProjectStub extends AbstractAggregateMavenProjectStub {
-    public AggregateNotInSubDirectoryTestMavenProjectStub() {
-        super(
-                "/aggregate-modules-not-in-subdirectories-test/all",
-                "pom.xml",
-                "/aggregate-modules-not-in-subdirectories-test/target",
-                "../project1",
-                "../project2");
-    }
+public class App {
+    /** Does nothing. */
+    public void run() {}
 }

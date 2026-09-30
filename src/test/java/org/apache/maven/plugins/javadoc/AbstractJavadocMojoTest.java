@@ -20,14 +20,17 @@ package org.apache.maven.plugins.javadoc;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.Locale;
 
-import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.api.Session;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.api.settings.Settings;
 import org.apache.maven.plugins.javadoc.options.OfflineLink;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import static org.apache.maven.api.plugin.testing.MojoExtension.setVariableValueToObject;
+import static org.apache.maven.testing.plugin.MojoExtension.setVariableValueToObject;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -41,17 +44,21 @@ class AbstractJavadocMojoTest {
 
     @BeforeEach
     void setUp() {
-        mojo = new AbstractJavadocMojo(null, null, null, null, null, null, null) {
+        mojo = new AbstractJavadocMojo() {
             @Override
             public void doExecute() {}
         };
+        mojo.log = mock(Log.class);
+        Session session = mock(Session.class);
+        when(session.getSettings()).thenReturn(Settings.newInstance());
+        mojo.session = session;
     }
 
     @Test
     void testMJAVADOC432DetectLinksMessages() {
         Log log = mock(Log.class);
         when(log.isErrorEnabled()).thenReturn(true);
-        mojo.setLog(log);
+        mojo.log = log;
         mojo.outputDirectory = new File("target/test-classes");
 
         // first continues after warning, next exits with warning
@@ -76,7 +83,7 @@ class AbstractJavadocMojoTest {
     void testMJAVADOC527DetectLinksRecursion() {
         Log log = mock(Log.class);
         when(log.isErrorEnabled()).thenReturn(true);
-        mojo.setLog(log);
+        mojo.log = log;
         mojo.outputDirectory = new File("target/test-classes");
 
         assertThat(mojo.isValidJavadocLink("http://javamail.java.net/mailapi/apidocs", false))
@@ -142,5 +149,17 @@ class AbstractJavadocMojoTest {
 
         assertThat(link).isNotNull();
         assertThat(link.getUrl()).isEqualTo("https://docs.oracle.com/en/java/javase/11/docs/api/");
+    }
+
+    @Test
+    void siteLocaleFollowsTheSiteToolRules() {
+        assertThat(AbstractJavadocMojo.getSiteLocale(null)).isEqualTo(Locale.ENGLISH);
+        assertThat(AbstractJavadocMojo.getSiteLocale("default")).isEqualTo(Locale.ENGLISH);
+        assertThat(AbstractJavadocMojo.getSiteLocale("de")).isEqualTo(Locale.GERMAN);
+        assertThat(AbstractJavadocMojo.getSiteLocale("de_CH")).isEqualTo(new Locale("de", "CH"));
+        // the first locale of a list that the JVM knows wins
+        assertThat(AbstractJavadocMojo.getSiteLocale("xx_YY_ZZ_AA,fr")).isEqualTo(Locale.FRENCH);
+        // nothing usable falls back to English
+        assertThat(AbstractJavadocMojo.getSiteLocale("xx_YY_ZZ_AA")).isEqualTo(Locale.ENGLISH);
     }
 }
