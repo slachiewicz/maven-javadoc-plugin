@@ -184,7 +184,7 @@ class JavadocJarMojoTest {
      */
     @Test
     @InjectMojo(goal = "jar", pom = "javadocjar-no-sources-plugin-config.xml")
-    @Basedir("/unit/javadocjar-no-sources")
+    @Basedir("${basedir}/target/test-classes/unit/javadocjar-no-sources")
     void testNoJarWithoutSources(JavadocJarMojo mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
         mojo.execute();

@@ -61,6 +61,7 @@ import org.slf4j.LoggerFactory;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.maven.testing.plugin.MojoExtension.getBasedir;
+import static org.apache.maven.testing.plugin.MojoExtension.getVariableValueFromObject;
 import static org.apache.maven.testing.plugin.MojoExtension.setVariableValueToObject;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
@@ -529,7 +530,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "commapath-test-plugin-config.xml")
-    @Basedir("/unit/commapath,test")
+    @Basedir("${basedir}/target/test-classes/unit/commapath,test")
     @Test
     void testCommaPath(JavadocReport mojo) throws Exception {
         mojo.execute();
@@ -1322,7 +1323,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "exclude-package-names-test-plugin-config.xml")
-    @Basedir("/unit/exclude-package-names-test")
+    @Basedir("${basedir}/target/test-classes/unit/exclude-package-names-test")
     @Test
     void testExcludePackageNamesWildcard(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1345,7 +1346,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "nooverview-test-plugin-config.xml")
-    @Basedir("/unit/nooverview-test")
+    @Basedir("${basedir}/target/test-classes/unit/nooverview-test")
     @Test
     void testNoOverview(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1364,7 +1365,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "copyright-year-test-plugin-config.xml")
-    @Basedir("/unit/copyright-year-test")
+    @Basedir("${basedir}/target/test-classes/unit/copyright-year-test")
     @Test
     void testBottomYearFromOutputTimestamp(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1381,7 +1382,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "tag-multiline-test-plugin-config.xml")
-    @Basedir("/unit/tag-multiline-test")
+    @Basedir("${basedir}/target/test-classes/unit/tag-multiline-test")
     @Test
     void testTagMultiline(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1391,7 +1392,7 @@ class JavadocReportTest {
         assertThat(apidocs.resolve("foo/Bar.html")).exists();
 
         String options = readFile(apidocs.resolve("options"));
-        JavaVersion javadocVersion = getVariableValueFromObject(mojo, "javadocRuntimeVersion");
+        JavaVersion javadocVersion = (JavaVersion) getVariableValueFromObject(mojo, "javadocRuntimeVersion");
         if (javadocVersion.isBefore("9")) {
             // the line break and the indentation of the second line collapse into whitespace
             assertThat(options.replaceAll("\\s+", " "))
@@ -1409,7 +1410,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "addstylesheets-test-plugin-config.xml")
-    @Basedir("/unit/addstylesheets-test")
+    @Basedir("${basedir}/target/test-classes/unit/addstylesheets-test")
     @Test
     void testAddStylesheets(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1419,7 +1420,7 @@ class JavadocReportTest {
         Path html = apidocs.resolve("com/example/MJavaDoc625.html");
         assertThat(html).exists();
 
-        JavaVersion javadocVersion = getVariableValueFromObject(mojo, "javadocRuntimeVersion");
+        JavaVersion javadocVersion = (JavaVersion) getVariableValueFromObject(mojo, "javadocRuntimeVersion");
         if (javadocVersion.isBefore("10")) {
             // the option is skipped (with a warning) on javadoc tools that do not know it
             assertThat(readFile(apidocs.resolve("options"))).doesNotContain("--add-stylesheet");
@@ -1437,7 +1438,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "addstylesheets-test-plugin-config.xml")
-    @Basedir("/unit/addstylesheets-test")
+    @Basedir("${basedir}/target/test-classes/unit/addstylesheets-test")
     @Test
     void testAddStylesheetsOnJavadoc9(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1454,7 +1455,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "wrong-path-separator-test-plugin-config.xml")
-    @Basedir("/unit/wrong-path-separator-test")
+    @Basedir("${basedir}/target/test-classes/unit/wrong-path-separator-test")
     @Test
     void testSourcepathWithWrongPathSeparator(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));
@@ -1479,7 +1480,7 @@ class JavadocReportTest {
      * @throws Exception if any
      */
     @InjectMojo(goal = "javadoc", pom = "javadoc-directory-test-plugin-config.xml")
-    @Basedir("/unit/javadoc-directory-test")
+    @Basedir("${basedir}/target/test-classes/unit/javadoc-directory-test")
     @Test
     void testJavadocDirectoryResources(JavadocReport mojo) throws Exception {
         deleteDirectory(new File(getBasedir(), "target"));

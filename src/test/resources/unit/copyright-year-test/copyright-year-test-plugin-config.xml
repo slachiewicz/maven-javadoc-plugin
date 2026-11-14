@@ -30,12 +30,20 @@ under the License.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <configuration>
-          <outputDirectory>${basedir}/target/site</outputDirectory>
-          <javadocOptionsDir>${basedir}/target/javadoc-bundle-options</javadocOptionsDir>
+          <outputDirectory>${project.basedir}/target/site</outputDirectory>
+          <javadocOptionsDir>${project.basedir}/target/javadoc-bundle-options</javadocOptionsDir>
           <quiet>true</quiet>
           <debug>true</debug>
           <failOnError>true</failOnError>
           <outputTimestamp>2020-03-12T06:39:23Z</outputTimestamp>
+          <groups/>
+          <tags/>
+          <bootclasspathArtifacts/>
+          <docletArtifacts/>
+          <offlineLinks/>
+          <resourcesArtifacts/>
+          <tagletArtifacts/>
+          <taglets/>
         </configuration>
       </plugin>
     </plugins>
